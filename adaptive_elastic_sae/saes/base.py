@@ -23,7 +23,7 @@ class BaseSAE(nn.Module):
         # Traditional AEs have no bias parameter in the decoder
         # SAEs include it to avoid centering bias (to avoid wasting capacity on the mean)
         self.b_dec = nn.Parameter(torch.zeros(n_dim, dtype=dtype, device=device))
-        
+
         # Encoder: n_dim -> d_dict
         self.encoder = nn.Linear(n_dim, d_dict, dtype=dtype, device=device)
 
@@ -36,12 +36,9 @@ class BaseSAE(nn.Module):
     def _normalize_decoder(self) -> None:
         """Normalize decoder columns to unit length."""
         with torch.no_grad():
-            self.decoder.weight.data = (
-                self.decoder.weight.data
-                / torch.clamp(
-                    self.decoder.weight.data.norm(dim=0, keepdim=True),
-                    min=1e-12,
-                )
+            self.decoder.weight.data = self.decoder.weight.data / torch.clamp(
+                self.decoder.weight.data.norm(dim=0, keepdim=True),
+                min=1e-12,
             )
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
