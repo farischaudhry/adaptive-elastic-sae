@@ -21,6 +21,10 @@ from adaptive_elastic_sae.training.metrics import (
     mean_max_cosine_similarity,
     weight_bimodality_ratio,
 )
+from adaptive_elastic_sae.training.gpu_metrics import (
+    flops_progress_metrics,
+    measure_training_step_flops,
+)
 from adaptive_elastic_sae.training.trainer_utils import (
     BatchProvider,
     SyntheticBatchProvider,
@@ -93,6 +97,8 @@ class SAETrainer:
         run_config["model_type"] = self.config.model_type
         run_config.update(run_metadata)
 
+        measured_flops_per_step: float | None = None
+
         if use_wandb:
             try:
                 import wandb
@@ -122,6 +128,19 @@ class SAETrainer:
                 dtype=self.config.dtype,
             )
             x = batch["x"]
+
+            # Real FLOPs profile for one full training step (forward+loss+backward).
+            if step == 0:
+                flops_metrics = measure_training_step_flops(
+                    model=self.model,
+                    optimizer=self.optimizer,
+                    x=x,
+                    warmup_steps=self.config.warmup_steps,
+                )
+                measured_flops_per_step = flops_metrics.get("measured_flops_per_step")
+                run_config.update(flops_metrics)
+                if use_wandb:
+                    wandb.config.update(flops_metrics, allow_val_change=True)
 
             # Forward
             x_hat, h = self.model.forward(x)
@@ -163,6 +182,12 @@ class SAETrainer:
                 metrics = self._compute_metrics(x, x_hat, h)
                 metrics["step"] = step + 1
                 metrics["loss"] = loss.item()
+                metrics.update(
+                    flops_progress_metrics(
+                        measured_flops_per_step=measured_flops_per_step,
+                        step=step + 1,
+                    )
+                )
                 metrics.update(loss_components)
                 metrics_history.append(metrics)
 
@@ -229,14 +254,15 @@ class SAETrainer:
             eps=1e-12,
         )
 
-
         # For AdaptiveLasso and AdaptiveElasticNet
         # Adaptive weight metrics (if model has EMA-based adaptive weighting)
         if hasattr(self.model, "ema_abs_activations"):
             mean_abs_act = self.model.ema_abs_activations
-            metrics["activation_effective_sample_size"] = activation_effective_sample_size(
-                mean_abs_act,
-                eps=1e-12,
+            metrics["activation_effective_sample_size"] = (
+                activation_effective_sample_size(
+                    mean_abs_act,
+                    eps=1e-12,
+                )
             )
         if hasattr(self.model, "get_adaptive_weights"):
             try:

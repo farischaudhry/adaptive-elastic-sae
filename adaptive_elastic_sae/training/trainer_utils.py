@@ -20,7 +20,7 @@ class TrainerConfig:
     model_type: str = "unknown"
     device: str | torch.device = "cpu"
     dtype: torch.dtype = torch.float32
-    
+
 
 class BatchProvider(Protocol):
     """Interface for data providers used by SAETrainer."""
