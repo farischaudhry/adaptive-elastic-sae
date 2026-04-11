@@ -1,0 +1,112 @@
+experiment:
+  name: spiked_model_ablation
+  seeds: [0, 1, 2]
+
+data:
+  n_dim: 256
+  d_dict: 1024
+  k_sparse: 16
+  noise_std: 0.0
+  allow_negative_codes: false
+  rho_values: [0.0, 0.7, 0.99]
+
+training:
+  num_steps: 30_000
+  batch_size: 256
+  learning_rate: 1.0e-3
+  warmup_steps: 10_000
+  max_activations_window: 10_000
+  log_interval: 500
+  device: cuda
+  dtype: float32
+
+models:
+  vanilla_l1_lam0p1:
+    class_name: VanillaSAE
+    lambda_1: 0.1
+
+  vanilla_l1_lam0p01:
+    class_name: VanillaSAE
+    lambda_1: 0.01
+
+  adaptive_lasso_lam0p1:
+    class_name: AdaptiveLassoSAE
+    lambda_1: 0.1
+    gamma: 1.0
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+
+  adaptive_lasso_lam0p01:
+    class_name: AdaptiveLassoSAE
+    lambda_1: 0.01
+    gamma: 1.0
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+
+  elastic_net_l1_0p1_l2_0p01:
+    class_name: ElasticNetSAE
+    lambda_1: 0.1
+    lambda_2: 0.01
+
+  elastic_net_l1_0p1_l2_0p001:
+    class_name: ElasticNetSAE
+    lambda_1: 0.1
+    lambda_2: 0.001
+
+  elastic_net_l1_0p01_l2_0p01:
+    class_name: ElasticNetSAE
+    lambda_1: 0.01
+    lambda_2: 0.01
+
+  elastic_net_l1_0p01_l2_0p001:
+    class_name: ElasticNetSAE
+    lambda_1: 0.01
+    lambda_2: 0.001
+
+  adaptive_elastic_net_l1_0p1_l2_0p01:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.1
+    lambda_2: 0.01
+    gamma: 1.0
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+
+  adaptive_elastic_net_l1_0p1_l2_0p001:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.1
+    lambda_2: 0.001
+    gamma: 1.0
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+
+  adaptive_elastic_net_l1_0p01_l2_0p01:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.01
+    lambda_2: 0.01
+    gamma: 1.0
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+
+  adaptive_elastic_net_l1_0p01_l2_0p001:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.01
+    lambda_2: 0.001
+    gamma: 1.0
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+
+wandb:
+  enabled: true
+  project: aen-sae-mechanistic
+  entity: farischaudhry-imperial-college-london
+  tags:
+    - experiment-1.1
+    - regularization-ablation
+  run_tag_templates:
+    - "rho={rho:.2f}"

@@ -53,5 +53,6 @@ wandb:
   entity: farischaudhry-imperial-college-london
   tags:
     - experiment-1.1
+    - main-experiment
   run_tag_templates:
     - "rho={rho:.2f}"
