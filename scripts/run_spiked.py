@@ -112,12 +112,6 @@ def main() -> None:
         help="Path to YAML config file",
     )
     parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Override config seed",
-    )
-    parser.add_argument(
         "--use-wandb",
         action="store_true",
         help="Enable W&B logging",
@@ -144,7 +138,7 @@ def main() -> None:
 
     # Get seeds from experiment config
     experiment_cfg = config.get("experiment", {})
-    seeds = experiment_cfg.get("seeds", [args.seed if args.seed is not None else 404])
+    seeds = experiment_cfg.get("seeds", [404])
 
     # Seed sweep
     for seed in seeds:
@@ -212,6 +206,11 @@ def main() -> None:
                 )
 
                 run_name = f"spiked-rho{rho:.2f}-{model_name}-seed{seed}"
+                run_tag_templates = wandb_cfg.get("run_tag_templates", [])
+                run_tags = [
+                    tpl.format(rho=rho, seed=seed, model_name=model_name)
+                    for tpl in run_tag_templates
+                ]
 
                 # Train
                 trainer = SAETrainer.from_synthetic(model, trainer_config, gen)
@@ -224,6 +223,7 @@ def main() -> None:
                         "rho": rho,
                         "model_type": model_name,
                     },
+                    run_tags=run_tags,
                 )
 
                 print(f"\nCompleted {model_name} on rho={rho:.2f}\n")

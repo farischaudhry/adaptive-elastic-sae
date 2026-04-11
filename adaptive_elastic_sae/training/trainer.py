@@ -74,12 +74,15 @@ class SAETrainer:
         run_name: str = "sae-train",
         wandb_config: dict | None = None,
         run_metadata: dict[str, Any] | None = None,
+        run_tags: list[str] | None = None,
     ) -> dict[str, Any]:
         """Run full training, return aggregate metrics."""
         if wandb_config is None:
             wandb_config = {}
         if run_metadata is None:
             run_metadata = {}
+        if run_tags is None:
+            run_tags = []
 
         # Attach experiment metadata per run.
         run_config = asdict(self.config)
@@ -94,11 +97,14 @@ class SAETrainer:
             try:
                 import wandb
 
+                base_tags = wandb_config.get("tags", [])
+                tags = [*base_tags, *run_tags]
+
                 wandb.init(
                     project=wandb_config.get("project", "adaptive-elastic-sae"),
                     entity=wandb_config.get("entity"),
                     name=run_name,
-                    tags=wandb_config.get("tags", []),
+                    tags=tags,
                     config=run_config,
                     reinit=True,
                 )

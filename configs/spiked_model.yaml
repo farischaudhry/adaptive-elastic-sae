@@ -52,4 +52,6 @@ wandb:
   project: aen-sae-mechanistic
   entity: farischaudhry-imperial-college-london
   tags:
-    - spiked-model
+    - experiment-1.1
+  run_tag_templates:
+    - "rho={rho:.2f}"
