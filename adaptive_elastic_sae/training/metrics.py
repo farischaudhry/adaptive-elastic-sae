@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
 
@@ -71,6 +73,51 @@ def active_gram_spectrum(
         "active_min_eigenvalue": min_eig.item(),
         "active_max_eigenvalue": max_eig.item(),
         "active_condition_number": (max_eig / min_eig).item(),
+    }
+
+
+@torch.no_grad()
+def compute_cross_leverage(
+    decoder: torch.Tensor, active_mask: torch.Tensor, k_top: int = 5, eps: float = 1e-12
+) -> dict[str, Any]:
+    """
+    Computes h_j(A) = (1/n) ||P_A a_j||^2.
+    Identifies features 'shadowed' by the active subspace.
+    """
+    if not active_mask.any():
+        return {
+            "mean_h_j": 0.0,
+            "total_h_j": 0.0,
+            "shadowed_ids": [],
+            "shadowed_scores": [],
+        }
+
+    n_dim = decoder.shape[0]
+    inactive_indices = torch.where(~active_mask)[0]
+
+    d_a = decoder[:, active_mask]  # Active vectors
+    d_ac = decoder[:, ~active_mask]  # Inactive vectors
+
+    # Local Gram matrices
+    g_aa = (d_a.T @ d_a) / n_dim
+    g_aca = (d_ac.T @ d_a) / n_dim
+
+    # Regression of inactive onto active
+    inv_g_aa_g_at_ac = torch.linalg.solve(
+        g_aa + eps * torch.eye(g_aa.shape[0], device=g_aa.device), g_aca.T
+    )
+
+    # h_j alignment scores
+    h_j = n_dim * torch.sum(g_aca * inv_g_aa_g_at_ac.T, dim=1)
+
+    actual_k = min(k_top, h_j.size(0))
+    top_scores, top_local_idx = torch.topk(h_j, k=actual_k)
+
+    return {
+        "mean_h_j": h_j.mean().item(),
+        "total_h_j": h_j.sum().item(),
+        "shadowed_ids": inactive_indices[top_local_idx].tolist(),
+        "shadowed_scores": top_scores.tolist(),
     }
 
 
