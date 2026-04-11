@@ -63,7 +63,9 @@ def instantiate_model(
             ghost_activation=model_config.get("ghost_activation", "softplus"),
             ghost_exp_clip=model_config.get("ghost_exp_clip", 6.0),
             firing_ema_beta=model_config.get("firing_ema_beta", 0.999),
-            persistent_dead_threshold=model_config.get("persistent_dead_threshold", 1e-5),
+            persistent_dead_threshold=model_config.get(
+                "persistent_dead_threshold", 1e-5
+            ),
             min_steps_before_ghost=model_config.get("min_steps_before_ghost", 500),
             **shared_args,
         )
@@ -136,87 +138,99 @@ def main() -> None:
     dtype_str = train_cfg.get("dtype", "float32")
     use_wandb = args.use_wandb and wandb_cfg.get("enabled", False)
 
-    print(f"\n{'='*80}")
-    print(f"SAE Spiked-Model Mechanistic Validation")
-    print(f"{'='*80}\n")
+    print(f"\n{'=' * 80}")
+    print("SAE Spiked-Model Mechanistic Validation")
+    print(f"{'=' * 80}\n")
 
-    # Rho sweep
-    rho_values = data_cfg.get("rho_values", [0.0, 0.5, 0.9])
-    for rho in rho_values:
-        print(f"\n{'='*80}")
-        print(f"RHO = {rho:.2f}")
-        print(f"{'='*80}\n")
+    # Get seeds from experiment config
+    experiment_cfg = config.get("experiment", {})
+    seeds = experiment_cfg.get("seeds", [args.seed if args.seed is not None else 404])
 
-        # Create data generator
-        gen = SpikedDataGenerator(
-            n_dim=data_cfg["n_dim"],
-            d_dict=data_cfg["d_dict"],
-            k_sparse=data_cfg["k_sparse"],
-            rho=rho,
-            noise_std=data_cfg.get("noise_std", 0.0),
-            allow_negative_codes=data_cfg.get("allow_negative_codes", False),
-            seed=args.seed or data_cfg.get("seed", 42),
-            device=device,
-            dtype=torch.float32
-            if dtype_str == "float32"
-            else torch.float64,
-        )
+    # Seed sweep
+    for seed in seeds:
+        print(f"\n{'─' * 80}")
+        print(f"SEED = {seed}")
+        print(f"{'─' * 80}\n")
 
-        # Log dictionary statistics
-        dict_stats = gen.dictionary_stats()
-        print(f"Dictionary stats (rho={rho:.2f}):")
-        for k, v in dict_stats.items():
-            print(f"  {k}: {v:.4f}")
-        print()
+        # Rho sweep
+        rho_values = data_cfg.get("rho_values", [0.0, 0.5, 0.9])
+        for rho in rho_values:
+            print(f"\n{'=' * 80}")
+            print(f"RHO = {rho:.2f}")
+            print(f"{'=' * 80}\n")
 
-        # Train each model variant
-        for model_name, model_config in models_cfg.items():
-            print(f"{'─'*80}")
-            print(f"Training {model_name.upper()} on rho={rho:.2f}")
-            print(f"{'─'*80}\n")
-
-            # Instantiate model
-            model = instantiate_model(
-                model_name,
-                model_config,
-                data_cfg["n_dim"],
-                data_cfg["d_dict"],
-                device,
-                dtype_str,
-            )
-
-            # Create trainer config
-            trainer_config = TrainerConfig(
-                num_steps=train_cfg["num_steps"],
-                batch_size=train_cfg["batch_size"],
-                learning_rate=train_cfg["learning_rate"],
-                warmup_steps=train_cfg.get("warmup_steps", 10_000_000),
-                max_activations_window=train_cfg.get("max_activations_window", 1_000_000),
-                log_interval=train_cfg.get("log_interval", 100),
+            # Create data generator with current seed
+            gen = SpikedDataGenerator(
+                n_dim=data_cfg["n_dim"],
+                d_dict=data_cfg["d_dict"],
+                k_sparse=data_cfg["k_sparse"],
+                rho=rho,
+                noise_std=data_cfg.get("noise_std", 0.0),
+                allow_negative_codes=data_cfg.get("allow_negative_codes", False),
+                seed=seed,
                 device=device,
-                dtype=torch.float32
-                if dtype_str == "float32"
-                else torch.float64,
+                dtype=torch.float32 if dtype_str == "float32" else torch.float64,
             )
 
-            run_name = f"spiked-rho{rho:.2f}-{model_name}"
-            if use_wandb:
-                run_seed = args.seed if args.seed is not None else data_cfg.get("seed", 42)
-                run_name += f"-seed{run_seed}"
+            # Log dictionary statistics
+            dict_stats = gen.dictionary_stats()
+            print(f"Dictionary stats (rho={rho:.2f}):")
+            for k, v in dict_stats.items():
+                print(f"  {k}: {v:.4f}")
+            print()
 
-            # Train
-            trainer = SAETrainer.from_synthetic(model, trainer_config, gen)
-            result = trainer.train(
-                use_wandb=use_wandb,
-                run_name=run_name,
-                wandb_config=wandb_cfg,
-            )
+            # Train each model variant
+            for model_name, model_config in models_cfg.items():
+                print(f"{'─' * 80}")
+                print(f"Training {model_name.upper()} on rho={rho:.2f}")
+                print(f"{'─' * 80}\n")
 
-            print(f"\nCompleted {model_name} on rho={rho:.2f}\n")
+                # Instantiate model
+                model = instantiate_model(
+                    model_name,
+                    model_config,
+                    data_cfg["n_dim"],
+                    data_cfg["d_dict"],
+                    device,
+                    dtype_str,
+                )
 
-    print(f"\n{'='*80}")
+                # Create trainer config
+                trainer_config = TrainerConfig(
+                    num_steps=train_cfg["num_steps"],
+                    batch_size=train_cfg["batch_size"],
+                    learning_rate=train_cfg["learning_rate"],
+                    warmup_steps=train_cfg.get("warmup_steps", 10_000_000),
+                    max_activations_window=train_cfg.get(
+                        "max_activations_window", 1_000_000
+                    ),
+                    log_interval=train_cfg.get("log_interval", 100),
+                    seed=seed,
+                    model_type=model_name,
+                    device=device,
+                    dtype=torch.float32 if dtype_str == "float32" else torch.float64,
+                )
+
+                run_name = f"spiked-rho{rho:.2f}-{model_name}-seed{seed}"
+
+                # Train
+                trainer = SAETrainer.from_synthetic(model, trainer_config, gen)
+                trainer.train(
+                    use_wandb=use_wandb,
+                    run_name=run_name,
+                    wandb_config=wandb_cfg,
+                    run_metadata={
+                        "seed": seed,
+                        "rho": rho,
+                        "model_type": model_name,
+                    },
+                )
+
+                print(f"\nCompleted {model_name} on rho={rho:.2f}\n")
+
+    print(f"\n{'=' * 80}")
     print("Spiked-model sweep complete!")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
 
 if __name__ == "__main__":

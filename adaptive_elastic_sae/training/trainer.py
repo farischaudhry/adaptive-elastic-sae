@@ -1,16 +1,17 @@
-"""Unified training loop for SAE experiments."""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Protocol
+from dataclasses import asdict
+from typing import Any
 
 import torch
 from torch.optim import Adam
 
-from ..saes.base import BaseSAE
-from .metrics import (
+from adaptive_elastic_sae.saes.base import BaseSAE
+from adaptive_elastic_sae.training.metrics import (
+    activation_effective_sample_size,
     active_gram_spectrum,
+    compute_cross_leverage,
+    dead_neuron_recovery_rate,
     dead_neurons_pct,
     explained_variance,
     feature_shrinkage_ratio,
@@ -18,56 +19,20 @@ from .metrics import (
     l0_active_features,
     l0_vs_l1_ratio,
     mean_max_cosine_similarity,
+    weight_bimodality_ratio,
+)
+from adaptive_elastic_sae.training.trainer_utils import (
+    BatchProvider,
+    SyntheticBatchProvider,
+    TrainerConfig,
 )
 
 
-class BatchProvider(Protocol):
-    """Interface for data providers used by SAETrainer."""
-
-    def next_batch(
-        self,
-        batch_size: int,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> dict[str, torch.Tensor]:
-        """Return a batch dict containing at least key 'x'."""
-
-
-class SyntheticBatchProvider:
-    """Adapter that wraps SpikedDataGenerator into the generic BatchProvider interface."""
-
-    def __init__(self, generator: Any) -> None:
-        self.generator = generator
-
-    def next_batch(
-        self,
-        batch_size: int,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> dict[str, torch.Tensor]:
-        x, h_true = self.generator.generate_batch(batch_size)
-        return {
-            "x": x.to(device=device, dtype=dtype),
-            "h_true": h_true.to(device=device, dtype=dtype),
-        }
-
-
-@dataclass
-class TrainerConfig:
-    """Training hyperparameters."""
-
-    num_steps: int = 10_000
-    batch_size: int = 256
-    learning_rate: float = 1e-3
-    warmup_steps: int = 1_000_000
-    max_activations_window: int = 1_000_000  # For dead neuron tracking
-    log_interval: int = 100
-    device: str | torch.device = "cpu"
-    dtype: torch.dtype = torch.float32
-
-
 class SAETrainer:
-    """Trainer for synthetic SAE experiments."""
+    """
+    Trainer for synthetic SAE experiments.
+    Does not support using an LLM-based model or validation sets.
+    """
 
     def __init__(
         self,
@@ -97,19 +62,33 @@ class SAETrainer:
         model: BaseSAE,
         config: TrainerConfig,
         generator: Any,
-    ) -> "SAETrainer":
+    ) -> SAETrainer:
         """Construct trainer using synthetic generator adapter."""
-        return cls(model=model, config=config, batch_provider=SyntheticBatchProvider(generator))
+        return cls(
+            model=model, config=config, batch_provider=SyntheticBatchProvider(generator)
+        )
 
     def train(
         self,
         use_wandb: bool = False,
         run_name: str = "sae-train",
         wandb_config: dict | None = None,
+        run_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run full training, return aggregate metrics."""
         if wandb_config is None:
             wandb_config = {}
+        if run_metadata is None:
+            run_metadata = {}
+
+        # Attach experiment metadata per run.
+        run_config = asdict(self.config)
+        run_config["device"] = str(run_config["device"])
+        run_config["dtype"] = str(run_config["dtype"])
+        # Explicitly keep these visible for grouping in W&B.
+        run_config["seed"] = self.config.seed
+        run_config["model_type"] = self.config.model_type
+        run_config.update(run_metadata)
 
         if use_wandb:
             try:
@@ -120,6 +99,7 @@ class SAETrainer:
                     entity=wandb_config.get("entity"),
                     name=run_name,
                     tags=wandb_config.get("tags", []),
+                    config=run_config,
                     reinit=True,
                 )
             except ImportError:
@@ -193,6 +173,16 @@ class SAETrainer:
             # Reset max activations periodically
             if (step + 1) % self.config.max_activations_window == 0:
                 self.max_activations_history.append(self.max_activations.clone())
+
+                if len(self.max_activations_history) >= 2:
+                    recovery_rate = dead_neuron_recovery_rate(
+                        self.max_activations_history[-2],
+                        self.max_activations_history[-1],
+                        eps=1e-12,
+                    )
+                    if use_wandb:
+                        wandb.log({"dead_neuron_recovery_rate": recovery_rate})
+
                 self.max_activations.zero_()
 
         if use_wandb:
@@ -233,24 +223,56 @@ class SAETrainer:
             eps=1e-12,
         )
 
+
+        # For AdaptiveLasso and AdaptiveElasticNet
+        # Adaptive weight metrics (if model has EMA-based adaptive weighting)
+        if hasattr(self.model, "ema_abs_activations"):
+            mean_abs_act = self.model.ema_abs_activations
+            metrics["activation_effective_sample_size"] = activation_effective_sample_size(
+                mean_abs_act,
+                eps=1e-12,
+            )
+        if hasattr(self.model, "get_adaptive_weights"):
+            try:
+                weights = self.model.get_adaptive_weights()
+                metrics["weight_bimodality_ratio"] = weight_bimodality_ratio(
+                    weights,
+                    delta_sig=0.1,
+                    delta_noise=5.0,
+                    eps=1e-12,
+                )
+            except Exception:
+                pass  # Skip if method fails or not applicable
+
         # Geometric: decoder coherence and conditioning (local active set, not batch union)
         local_active_mask = h[0] > 1e-12
         if local_active_mask.any():
+            decoder = self.model.decoder.weight.data
+
             metrics["interaction_leakage_frobenius"] = (
                 interaction_leakage_frobenius_approx(
-                    self.model.decoder.weight.data,
+                    decoder,
                     local_active_mask,
                 )
             )
 
-            gram_metrics = active_gram_spectrum(
-                self.model.decoder.weight.data,
-                local_active_mask,
+            metrics.update(
+                compute_cross_leverage(
+                    decoder,
+                    local_active_mask,
+                    k_top=5,
+                )
             )
-            metrics.update(gram_metrics)
+
+            metrics.update(
+                active_gram_spectrum(
+                    decoder,
+                    local_active_mask,
+                )
+            )
 
             metrics["mean_max_cosine_similarity"] = mean_max_cosine_similarity(
-                self.model.decoder.weight.data,
+                decoder,
                 eps=1e-12,
             )
 
