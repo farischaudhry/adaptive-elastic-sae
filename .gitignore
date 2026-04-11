@@ -19,6 +19,9 @@ __pycache__/
 # VSCode
 .vscode/
 
+# wandb
+wandb/
+
 # Distribution / packaging
 .Python
 build/
