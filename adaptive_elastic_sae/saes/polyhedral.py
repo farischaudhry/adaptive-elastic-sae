@@ -80,17 +80,35 @@ class AdaptiveLassoSAE(BaseSAE):
             )
 
     def get_adaptive_weights(self) -> torch.Tensor:
-        """Compute adaptive penalty weights: 1 / (bar_a_i^gamma + eps)."""
+        """Compute scale-invariant adaptive penalty weights."""
         eps = torch.tensor(1e-5, dtype=self.dtype, device=self.device)
-        weights = 1.0 / (torch.clamp(self.ema_abs_activations, min=eps) ** self.gamma)
-        weights = torch.clamp(weights, min=self.weight_min, max=self.weight_max)
-        return weights
+        ema = torch.clamp(self.ema_abs_activations, min=eps)
 
-    def warmup_factor(self, warmup_steps: int = 0) -> float:
-        """Linearly ramp adaptive weights from 0 to 1 over warmup steps."""
+        # Dynamic normalization: we use the mean of the top 1% of features to prevent outlier skew
+        k_top = max(1, int(ema.shape[0] * 0.01))
+        reference_ema = torch.topk(ema, k_top).values.mean().detach()
+
+        # Scale-Invariant Weight: (Reference / Current)^gamma
+        # Valid features will have w_i ~ 1.0. Noise features will have w_i >> 1.0.
+        weights = (reference_ema / ema) ** self.gamma
+
+        # Clamp to prevent optimization death
+        return torch.clamp(weights, min=self.weight_min, max=self.weight_max)
+
+    def warmup_factor(
+        self, warmup_steps: int = 0, ramp_duration: float = 2000.0
+    ) -> float:
+        """Strictly hold at 0.0 during warmup, then linearly ramp over ramp_duration steps."""
         if warmup_steps <= 0:
             return 1.0
-        return min(1.0, self._step_count / max(1, warmup_steps))
+        steps_past_warmup = self._step_count - warmup_steps
+
+        # Strict hold: Do not apply adaptive weights yet
+        if steps_past_warmup < 0:
+            return 0.0
+
+        # Delayed Ramp: Ease the adaptive weights in so we don't shock the optimizer
+        return min(1.0, steps_past_warmup / ramp_duration)
 
     def compute_loss(
         self,
@@ -98,6 +116,7 @@ class AdaptiveLassoSAE(BaseSAE):
         x_hat: torch.Tensor,
         h: torch.Tensor,
         warmup_steps: int = 10_000,
+        ramp_duration: float = 2000.0,
         **kwargs,
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Loss with adaptive L1 weights + warmup schedule."""
@@ -108,7 +127,7 @@ class AdaptiveLassoSAE(BaseSAE):
 
         # Compute L1 with adaptive weights, linearly ramped during warmup
         adaptive_weights = self.get_adaptive_weights()
-        warmup_factor = self.warmup_factor(warmup_steps)
+        warmup_factor = self.warmup_factor(warmup_steps, ramp_duration)
         effective_weights = 1.0 + (adaptive_weights - 1.0) * warmup_factor
 
         l1_loss = self.lambda_1 * (effective_weights * h.abs()).sum(dim=1).mean()
@@ -162,17 +181,35 @@ class AdaptiveElasticNetSAE(BaseSAE):
             )
 
     def get_adaptive_weights(self) -> torch.Tensor:
-        """Compute adaptive penalty weights: 1 / (bar_a_i^gamma + eps)."""
+        """Compute scale-invariant adaptive penalty weights."""
         eps = torch.tensor(1e-5, dtype=self.dtype, device=self.device)
-        weights = 1.0 / (torch.clamp(self.ema_abs_activations, min=eps) ** self.gamma)
-        weights = torch.clamp(weights, min=self.weight_min, max=self.weight_max)
-        return weights
+        ema = torch.clamp(self.ema_abs_activations, min=eps)
 
-    def warmup_factor(self, warmup_steps: int = 0) -> float:
-        """Linearly ramp adaptive weights from 0 to 1 over warmup steps."""
+        # Dynamic normalization: we use the mean of the top 1% of features to prevent outlier skew
+        k_top = max(1, int(ema.shape[0] * 0.01))
+        reference_ema = torch.topk(ema, k_top).values.mean().detach()
+
+        # Scale-Invariant Weight: (Reference / Current)^gamma
+        # Valid features will have w_i ~ 1.0. Noise features will have w_i >> 1.0.
+        weights = (reference_ema / ema) ** self.gamma
+
+        # Clamp to prevent optimization death
+        return torch.clamp(weights, min=self.weight_min, max=self.weight_max)
+
+    def warmup_factor(
+        self, warmup_steps: int = 0, ramp_duration: float = 2000.0
+    ) -> float:
+        """Strictly hold at 0.0 during warmup, then linearly ramp over ramp_duration steps."""
         if warmup_steps <= 0:
             return 1.0
-        return min(1.0, self._step_count / max(1, warmup_steps))
+        steps_past_warmup = self._step_count - warmup_steps
+
+        # Strict hold: Do not apply adaptive weights yet
+        if steps_past_warmup < 0:
+            return 0.0
+
+        # Delayed Ramp: Ease the adaptive weights in so we don't shock the optimizer
+        return min(1.0, steps_past_warmup / ramp_duration)
 
     def compute_loss(
         self,
@@ -180,6 +217,7 @@ class AdaptiveElasticNetSAE(BaseSAE):
         x_hat: torch.Tensor,
         h: torch.Tensor,
         warmup_steps: int = 10_000,
+        ramp_duration: float = 2000.0,
         **kwargs,
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Loss with adaptive L1 weights + fixed L2 + warmup."""
@@ -190,7 +228,7 @@ class AdaptiveElasticNetSAE(BaseSAE):
 
         # Adaptive L1 with warmup
         adaptive_weights = self.get_adaptive_weights()
-        warmup_factor = self.warmup_factor(warmup_steps)
+        warmup_factor = self.warmup_factor(warmup_steps, ramp_duration)
         effective_weights = 1.0 + (adaptive_weights - 1.0) * warmup_factor
 
         l1_loss = self.lambda_1 * (effective_weights * h.abs()).sum(dim=1).mean()
