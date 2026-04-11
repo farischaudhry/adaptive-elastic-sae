@@ -28,7 +28,7 @@ class ElasticNetSAE(BaseSAE):
         h: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor, dict[str, float]]:
-        """Total loss: reconstruction + L1 + L2 with decomposed logging terms."""
+        """Total loss: reconstruction + L1 + L2."""
         recon_loss = self.compute_reconstruction_loss(x, x_hat)
         l1_loss = self.lambda_1 * h.abs().sum(dim=1).mean()
         l2_loss = self.lambda_2 * (h**2).sum(dim=1).mean()
@@ -38,7 +38,6 @@ class ElasticNetSAE(BaseSAE):
             "loss_recon": recon_loss.item(),
             "loss_l1": l1_loss.item(),
             "loss_l2": l2_loss.item(),
-            "warmup_factor": 1.0,
         }
 
 
@@ -118,7 +117,6 @@ class AdaptiveLassoSAE(BaseSAE):
             "loss_total": total_loss.item(),
             "loss_recon": recon_loss.item(),
             "loss_l1": l1_loss.item(),
-            "loss_l2": 0.0,
             "warmup_factor": warmup_factor,
         }
 
