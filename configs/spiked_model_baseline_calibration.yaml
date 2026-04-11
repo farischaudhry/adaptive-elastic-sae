@@ -1,0 +1,37 @@
+experiment:
+  name: baseline_calibration
+  seeds: [0]
+
+data:
+  n_dim: 256
+  d_dict: 1024
+  k_sparse: 16
+  rho_values: [0.0]
+
+training:
+  num_steps: 10_000
+  batch_size: 256
+  learning_rate: 1.0e-3
+  warmup_steps: 10_000
+  max_activations_window: 10_000
+  log_interval: 500
+  device: cuda
+  dtype: float32
+
+models:
+  vanilla_l1_calib_lambda_0p01:
+    class_name: VanillaSAE
+    lambda_1: 0.01
+  vanilla_l1_calib_lambda_0p005:
+    class_name: VanillaSAE
+    lambda_1: 0.005
+  vanilla_l1_calib_lambda_0p001:
+    class_name: VanillaSAE
+    lambda_1: 0.001
+
+wandb:
+  enabled: true
+  project: aen-sae-mechanistic
+  entity: farischaudhry-imperial-college-london
+  tags:
+    - experiment-1.1-calibration
