@@ -276,8 +276,10 @@ class SAETrainer:
             except Exception:
                 pass  # Skip if method fails or not applicable
 
-        # Geometric: decoder coherence and conditioning (local active set, not batch union)
-        local_active_mask = h[0] > 1e-12
+        # Geometric: decoder coherence and conditioning.
+        # Use the busiest sample in the batch as a worst-case local active set estimator.
+        busiest_idx = (h > 1e-12).sum(dim=1).argmax()
+        local_active_mask = h[busiest_idx] > 1e-12
         if local_active_mask.any():
             decoder = self.model.decoder.weight.data
 

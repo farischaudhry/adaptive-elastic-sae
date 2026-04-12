@@ -21,6 +21,7 @@ class LLMStreamConfig:
     lm_batch_size: int = 8
     streaming: bool = True
     skip_docs: int = 0
+    take_docs: int | None = None
     loop_dataset: bool = True
     device: str | torch.device = "cuda"
 
@@ -84,6 +85,9 @@ class PythiaActivationStreamer:
 
         if self.cfg.skip_docs > 0:
             ds = ds.skip(self.cfg.skip_docs)
+
+        if self.cfg.take_docs is not None:
+            ds = ds.take(self.cfg.take_docs)
 
         return iter(ds)
 

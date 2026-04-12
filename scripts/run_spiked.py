@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Entry point: Run spiked-model rho sweep with all SAE variants."""
-
 from __future__ import annotations
 
 import argparse
