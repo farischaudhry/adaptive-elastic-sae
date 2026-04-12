@@ -9,7 +9,7 @@ import torch
 @dataclass
 class LLMStreamConfig:
     """Configuration for streaming text and extracting LLM activations."""
-    
+
     tl_model_name: str = "pythia-70m-deduped"
     hf_tokenizer_name: str = "EleutherAI/pythia-70m-deduped"
     dataset_name: str = "NeelNanda/pile-10k"
@@ -39,17 +39,19 @@ class PythiaActivationStreamer:
         self._tokenizer = self._load_tokenizer()
         self._model = self._load_model()
         self._dataset_iter = self._load_dataset_iterator()
-        
+
         # Buffer State
         self._token_buffer: list[torch.Tensor] = []
         self._buffered_token_count: int = 0
-        
+
         # Safe EOS Resolution
         eos_id = self._tokenizer.eos_token_id
         if eos_id is None:
             eos_id = self._tokenizer.sep_token_id
         if eos_id is None:
-            raise ValueError(f"Tokenizer {cfg.hf_tokenizer_name} lacks eos_token_id and sep_token_id.")
+            raise ValueError(
+                f"Tokenizer {cfg.hf_tokenizer_name} lacks eos_token_id and sep_token_id."
+            )
         self.eos_token_id = eos_id
 
     def _load_tokenizer(self):
@@ -89,7 +91,7 @@ class PythiaActivationStreamer:
         """Pulls documents, packs them continuously, and slices an exact batch."""
         target_total_tokens = self.cfg.lm_batch_size * self.cfg.seq_len
 
-        # Fill buffer tracking count 
+        # Fill buffer tracking count
         while self._buffered_token_count < target_total_tokens:
             try:
                 sample = next(self._dataset_iter)
@@ -105,15 +107,13 @@ class PythiaActivationStreamer:
 
             # Tokenize cleanly without auto-added boundaries
             tokens = self._tokenizer(
-                text, 
-                return_tensors="pt", 
-                add_special_tokens=False
+                text, return_tensors="pt", add_special_tokens=False
             )["input_ids"].squeeze(0)
-            
+
             # Explicitly append single boundary
             eos = torch.tensor([self.eos_token_id], dtype=tokens.dtype)
             packed_chunk = torch.cat([tokens, eos])
-            
+
             self._token_buffer.append(packed_chunk)
             self._buffered_token_count += packed_chunk.numel()
 
@@ -130,7 +130,9 @@ class PythiaActivationStreamer:
             self._token_buffer = []
             self._buffered_token_count = 0
 
-        return batch_tokens.view(self.cfg.lm_batch_size, self.cfg.seq_len).to(self.device)
+        return batch_tokens.view(self.cfg.lm_batch_size, self.cfg.seq_len).to(
+            self.device
+        )
 
     @property
     def model(self):
@@ -143,5 +145,5 @@ class PythiaActivationStreamer:
     def next_activation_block(self) -> torch.Tensor:
         tokens = self._next_token_batch()
         _, cache = self._model.run_with_cache(tokens, names_filter=self.hook_name)
-        acts = cache[self.hook_name]  
+        acts = cache[self.hook_name]
         return acts.reshape(-1, acts.shape[-1])
