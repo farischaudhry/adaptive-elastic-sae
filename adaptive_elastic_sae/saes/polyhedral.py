@@ -70,7 +70,10 @@ class AdaptiveLassoSAE(BaseSAE):
             "ema_abs_activations",
             torch.ones(d_dict, dtype=dtype, device=device),
         )
-        self._step_count = 0
+        self.register_buffer(
+            "_step_count",
+            torch.tensor(0, dtype=torch.long, device=device),
+        )
 
     def update_ema(self, h: torch.Tensor) -> None:
         """Update EMA of absolute activations."""
@@ -103,7 +106,8 @@ class AdaptiveLassoSAE(BaseSAE):
         """Strictly hold at 0.0 during warmup, then linearly ramp over ramp_duration steps."""
         if warmup_steps <= 0:
             return 1.0
-        steps_past_warmup = self._step_count - warmup_steps
+        step_count = int(self._step_count.item())
+        steps_past_warmup = step_count - warmup_steps
 
         # Strict hold: Do not apply adaptive weights yet
         if steps_past_warmup < 0:
@@ -173,7 +177,10 @@ class AdaptiveElasticNetSAE(BaseSAE):
             "ema_abs_activations",
             torch.ones(d_dict, dtype=dtype, device=device),
         )
-        self._step_count = 0
+        self.register_buffer(
+            "_step_count",
+            torch.tensor(0, dtype=torch.long, device=device),
+        )
 
     def update_ema(self, h: torch.Tensor) -> None:
         """Update EMA of absolute activations."""
@@ -206,7 +213,8 @@ class AdaptiveElasticNetSAE(BaseSAE):
         """Strictly hold at 0.0 during warmup, then linearly ramp over ramp_duration steps."""
         if warmup_steps <= 0:
             return 1.0
-        steps_past_warmup = self._step_count - warmup_steps
+        step_count = int(self._step_count.item())
+        steps_past_warmup = step_count - warmup_steps
 
         # Strict hold: Do not apply adaptive weights yet
         if steps_past_warmup < 0:
