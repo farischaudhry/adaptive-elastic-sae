@@ -13,7 +13,9 @@ dependencies = [
     "pandas>=3.0.2",
     "pyyaml>=6.0.3",
     "torch>=2.11.0",
+    "transformer-lens>=2.11.0",
     "tqdm>=4.67.3",
     "transformers>=5.5.3",
     "wandb>=0.25.1",
+    "sae-lens>=6.39.0",
 ]
