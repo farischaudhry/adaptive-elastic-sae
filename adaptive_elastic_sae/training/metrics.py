@@ -102,10 +102,21 @@ def compute_cross_leverage(
     g_aa = (d_a.T @ d_a) / n_dim
     g_aca = (d_ac.T @ d_a) / n_dim
 
-    # Regression of inactive onto active
-    inv_g_aa_g_at_ac = torch.linalg.solve(
-        g_aa + eps * torch.eye(g_aa.shape[0], device=g_aa.device), g_aca.T
-    )
+    try:
+        # Regression of inactive onto active
+        sol = torch.linalg.lstsq(
+            g_aa + eps * torch.eye(g_aa.shape[0], device=g_aa.device), g_aca.T
+        )
+        inv_g_aa_g_at_ac = sol.solution
+    except (RuntimeError, torch.linalg.LinAlgError):
+        # Fallback for catastrophic failure:
+        # Return -1.0 to indicate a singularity in wandb logs.
+        return {
+            "mean_h_j": -1.0,
+            "total_h_j": -1.0,
+            "shadowed_ids": [],
+            "shadowed_scores": [],
+        }
 
     # h_j alignment scores
     h_j = n_dim * torch.sum(g_aca * inv_g_aa_g_at_ac.T, dim=1)

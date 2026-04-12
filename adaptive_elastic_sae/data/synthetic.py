@@ -137,17 +137,30 @@ class SpikedDataGenerator:
 
         active_min_eigs: list[float] = []
         active_cond_nums: list[float] = []
+        irc_scores_uniform: list[float] = []
+        irc_scores_exact: list[float] = []
+        signal_ceilings: list[float] = []
+
         singular_count = 0
         eps = 1e-12
 
         for _ in range(samples):
+            # Sample an active set A
             idx = torch.randperm(self.d_dict, generator=self._rng, device=self.device)[
                 : self.k_sparse
             ]
-            d_a = self.D[:, idx]
-            g_a = d_a.T @ d_a
-            eigvals = torch.linalg.eigvalsh(g_a)
+            active_mask = torch.zeros(self.d_dict, dtype=torch.bool, device=self.device)
+            active_mask[idx] = True
 
+            d_a = self.D[:, active_mask]
+            d_ac = self.D[:, ~active_mask]
+
+            # Local Gram blocks
+            g_aa = d_a.T @ d_a
+            g_aca = d_ac.T @ d_a
+
+            # Eigenvalue Analysis
+            eigvals = torch.linalg.eigvalsh(g_aa)
             min_eig = eigvals.min()
             max_eig = eigvals.max()
 
@@ -158,10 +171,48 @@ class SpikedDataGenerator:
             active_min_eigs.append(min_eig_clamped.item())
             active_cond_nums.append((max_eig / min_eig_clamped).item())
 
-        min_eigs_t = torch.tensor(active_min_eigs, dtype=self.dtype, device=self.device)
-        cond_nums_t = torch.tensor(
-            active_cond_nums, dtype=self.dtype, device=self.device
-        )
+            # IRC Calculation
+            try:
+                # G_AA * X = G_ACA^T  =>  X^T = G_ACA @ G_AA^-1
+                sol = torch.linalg.lstsq(
+                    g_aa + 1e-6 * torch.eye(self.k_sparse, device=self.device), g_aca.T
+                ).solution
+
+                # Uniform IRC (Worst-case)
+                irc_uni = torch.linalg.norm(sol.T, ord=float("inf")).item()
+                irc_scores_uniform.append(irc_uni)
+
+                # Exact IRC (Assuming non-negative h)
+                ones = torch.ones(
+                    self.k_sparse, 1, device=self.device, dtype=self.dtype
+                )
+                exact_vec = sol.T @ ones
+                irc_ext = torch.linalg.norm(exact_vec, ord=float("inf")).item()
+                irc_scores_exact.append(irc_ext)
+            except:  # noqa: E722
+                irc_scores_uniform.append(-1.0)
+                irc_scores_exact.append(-1.0)
+
+            # Signal Ceiling: E[||D^T y||_inf]
+            # y = D_A * h_A. We simulate a typical 'h_A' to find the max correlation.
+            h_sample = 1.0 + 2.0 * torch.rand(
+                self.k_sparse, device=self.device, dtype=self.dtype
+            )
+            y_sample = d_a @ h_sample
+            signal_ceiling = torch.norm(self.D.T @ y_sample, p=float("inf")).item()
+            signal_ceilings.append(signal_ceiling)
+
+        # Aggregation
+        def to_tensor(lst):
+            return torch.tensor(lst, dtype=self.dtype, device=self.device)
+
+        min_eigs_t = to_tensor(active_min_eigs)
+        cond_nums_t = to_tensor(active_cond_nums)
+        irc_uni_t = to_tensor(
+            [i for i in irc_scores_uniform if i > 0]
+        )  # Filter failures
+        irc_ext_t = to_tensor([i for i in irc_scores_exact if i > 0])
+        ceil_t = to_tensor(signal_ceilings)
 
         return {
             "mean_abs_offdiag": off_diag.abs().mean().item(),
@@ -173,5 +224,8 @@ class SpikedDataGenerator:
                 unbiased=False
             ).item(),
             "active_condition_number_p95": torch.quantile(cond_nums_t, 0.95).item(),
+            "expected_irc_uniform": irc_uni_t.mean().item(),
+            "expected_irc_exact": irc_ext_t.mean().item(),
+            "expected_signal_ceiling_l_inf": ceil_t.mean().item(),
             "singular_active_block_pct": 100.0 * singular_count / max(1, samples),
         }

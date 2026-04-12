@@ -172,6 +172,7 @@ def main() -> None:
             for k, v in dict_stats.items():
                 print(f"  {k}: {v:.4f}")
             print()
+            dict_stats_metadata = {f"dict_{k}": v for k, v in dict_stats.items()}
 
             # Train each model variant
             for model_name, model_config in models_cfg.items():
@@ -222,6 +223,7 @@ def main() -> None:
                         "seed": seed,
                         "rho": rho,
                         "model_type": model_name,
+                        **dict_stats_metadata,
                     },
                     run_tags=run_tags,
                 )
