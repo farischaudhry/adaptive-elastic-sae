@@ -8,7 +8,7 @@ data:
   k_sparse: 16
   noise_std: 0.0
   allow_negative_codes: false
-  rho_values: [0.0, 0.7, 0.99]
+  rho_values: [0.0, 0.7, 0.9]
 
 training:
   num_steps: 30_000
@@ -93,6 +93,48 @@ models:
     ema_beta: 0.999
     weight_min: 0.1
     weight_max: 10.0
+
+    # --- Anchor (Reference K%) Ablations ---
+  adaptive_elastic_net_anchor_10pct:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.006
+    lambda_2: 0.003
+    gamma: 0.5
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.10
+
+  adaptive_elastic_net_anchor_0p1pct:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.006
+    lambda_2: 0.003
+    gamma: 0.5
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.001
+
+  # --- Isolated L2 Curvature Ablations ---
+  adaptive_elastic_net_high_l2:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.006
+    lambda_2: 0.012 
+    gamma: 0.5
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.01
+
+  adaptive_elastic_net_low_l2:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.006      
+    lambda_2: 0.0005
+    gamma: 0.5
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.01
 
 wandb:
   enabled: true
