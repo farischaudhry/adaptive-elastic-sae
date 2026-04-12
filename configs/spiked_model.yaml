@@ -37,6 +37,7 @@ models:
     ema_beta: 0.999
     weight_min: 0.1
     weight_max: 10.0
+    ref_k_top_pct: 0.01
 
   adaptive_elastic_net:
     class_name: AdaptiveElasticNetSAE
@@ -46,6 +47,7 @@ models:
     ema_beta: 0.999
     weight_min: 0.1
     weight_max: 10.0
+    ref_k_top_pct: 0.01
 
 wandb:
   enabled: true
