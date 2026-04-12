@@ -82,6 +82,7 @@ def instantiate_model(
             ema_beta=model_config.get("ema_beta", 0.999),
             weight_min=model_config.get("weight_min", 0.1),
             weight_max=model_config.get("weight_max", 10.0),
+            ref_k_top_pct=model_config.get("ref_k_top_pct", 0.01),
             **shared_args,
         )
     elif class_name == "AdaptiveElasticNetSAE":
@@ -92,6 +93,7 @@ def instantiate_model(
             ema_beta=model_config.get("ema_beta", 0.999),
             weight_min=model_config.get("weight_min", 0.1),
             weight_max=model_config.get("weight_max", 10.0),
+            ref_k_top_pct=model_config.get("ref_k_top_pct", 0.01),
             **shared_args,
         )
     elif class_name == "TopKSAE":

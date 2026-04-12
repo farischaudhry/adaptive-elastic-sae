@@ -53,6 +53,7 @@ class AdaptiveLassoSAE(BaseSAE):
         ema_beta: float = 0.999,
         weight_min: float = 0.1,
         weight_max: float = 10.0,
+        ref_k_top_pct: float = 0.01,
         dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> None:
@@ -62,6 +63,7 @@ class AdaptiveLassoSAE(BaseSAE):
         self.ema_beta = ema_beta
         self.weight_min = weight_min
         self.weight_max = weight_max
+        self.ref_k_top_pct = ref_k_top_pct
 
         # EMA of absolute activations per feature
         self.register_buffer(
@@ -84,8 +86,8 @@ class AdaptiveLassoSAE(BaseSAE):
         eps = torch.tensor(1e-5, dtype=self.dtype, device=self.device)
         ema = torch.clamp(self.ema_abs_activations, min=eps)
 
-        # Dynamic normalization: we use the mean of the top 1% of features to prevent outlier skew
-        k_top = max(1, int(ema.shape[0] * 0.01))
+        # Dynamic normalization: we use the mean of the top K% of features
+        k_top = max(1, int(ema.shape[0] * self.ref_k_top_pct))
         reference_ema = torch.topk(ema, k_top).values.mean().detach()
 
         # Scale-Invariant Weight: (Reference / Current)^gamma
@@ -153,6 +155,7 @@ class AdaptiveElasticNetSAE(BaseSAE):
         ema_beta: float = 0.999,
         weight_min: float = 0.1,
         weight_max: float = 10.0,
+        ref_k_top_pct: float = 0.01,
         dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> None:
@@ -163,6 +166,7 @@ class AdaptiveElasticNetSAE(BaseSAE):
         self.ema_beta = ema_beta
         self.weight_min = weight_min
         self.weight_max = weight_max
+        self.ref_k_top_pct = ref_k_top_pct
 
         # EMA of absolute activations per feature
         self.register_buffer(
@@ -185,8 +189,8 @@ class AdaptiveElasticNetSAE(BaseSAE):
         eps = torch.tensor(1e-5, dtype=self.dtype, device=self.device)
         ema = torch.clamp(self.ema_abs_activations, min=eps)
 
-        # Dynamic normalization: we use the mean of the top 1% of features to prevent outlier skew
-        k_top = max(1, int(ema.shape[0] * 0.01))
+        # Dynamic normalization: we use the mean of the top K% of features
+        k_top = max(1, int(ema.shape[0] * self.ref_k_top_pct))
         reference_ema = torch.topk(ema, k_top).values.mean().detach()
 
         # Scale-Invariant Weight: (Reference / Current)^gamma
