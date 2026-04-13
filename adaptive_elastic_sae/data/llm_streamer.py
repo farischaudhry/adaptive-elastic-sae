@@ -23,6 +23,7 @@ class LLMStreamConfig:
     skip_docs: int = 0
     take_docs: int | None = None
     loop_dataset: bool = True
+    model_dtype: str = "float32"
     device: str | torch.device = "cuda"
 
 
@@ -70,6 +71,7 @@ class PythiaActivationStreamer:
         model = HookedTransformer.from_pretrained(
             self.cfg.tl_model_name,
             device=str(self.device),
+            dtype=self.cfg.model_dtype,
         )
         model.eval()
         return model
