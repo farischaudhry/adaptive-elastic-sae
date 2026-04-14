@@ -24,7 +24,7 @@ def dead_neuron_recovery_rate(
 
     curr_alive = curr_max_activations > eps
     recovered = (prev_dead & curr_alive).sum().item()
-    return 100.0 * recovered / denom
+    return recovered / denom
 
 
 @torch.no_grad()

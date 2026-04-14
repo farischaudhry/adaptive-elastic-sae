@@ -212,7 +212,12 @@ class SAETrainer:
                         eps=1e-12,
                     )
                     if use_wandb:
-                        wandb.log({"dead_neuron_recovery_rate": recovery_rate})
+                        wandb.log(
+                            {
+                                "dead_neuron_recovery_rate": recovery_rate,
+                                "dead_neuron_recovery_pct": 100.0 * recovery_rate,
+                            }
+                        )
 
                 self.max_activations.zero_()
 
