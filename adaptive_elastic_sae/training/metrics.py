@@ -197,3 +197,53 @@ def weight_bimodality_ratio(
     low = (weights < delta_sig).sum().float()
     high = torch.clamp((weights > delta_noise).sum().float(), min=eps)
     return (low / high).item()
+
+
+def summary_stats(
+    values: list[float] | torch.Tensor,
+    prefix: str,
+) -> dict[str, float]:
+    """Return mean/std/p10/p50/p90 summaries for scalar samples."""
+    if isinstance(values, list):
+        if len(values) == 0:
+            return {}
+        tensor = torch.tensor(values, dtype=torch.float32)
+    else:
+        if values.numel() == 0:
+            return {}
+        tensor = values.detach().float().reshape(-1)
+
+    q = torch.tensor([0.1, 0.5, 0.9], device=tensor.device, dtype=tensor.dtype)
+    quantiles = torch.quantile(tensor, q)
+    return {
+        f"{prefix}/mean": tensor.mean().item(),
+        f"{prefix}/std": tensor.std(unbiased=False).item(),
+        f"{prefix}/p10": quantiles[0].item(),
+        f"{prefix}/p50": quantiles[1].item(),
+        f"{prefix}/p90": quantiles[2].item(),
+    }
+
+
+def adaptive_weight_summary(
+    weights: torch.Tensor,
+    prefix: str,
+    weight_min: float | None = None,
+    weight_max: float | None = None,
+    bound_eps: float = 1e-4,
+) -> dict[str, float]:
+    """Quantile and bound-hit summaries for adaptive feature weights."""
+    if weights.numel() == 0:
+        return {}
+
+    w = weights.detach().float().reshape(-1)
+    metrics = summary_stats(w, prefix)
+
+    if weight_min is not None:
+        metrics[f"{prefix}/pinned_min_pct"] = (
+            100.0 * (w <= (float(weight_min) + bound_eps)).float().mean().item()
+        )
+    if weight_max is not None:
+        metrics[f"{prefix}/pinned_max_pct"] = (
+            100.0 * (w >= (float(weight_max) - bound_eps)).float().mean().item()
+        )
+    return metrics
