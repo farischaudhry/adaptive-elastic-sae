@@ -112,7 +112,7 @@ class SAETrainer:
                     name=run_name,
                     tags=tags,
                     config=run_config,
-                    reinit=True,
+                    reinit="finish_previous",
                 )
             except ImportError:
                 use_wandb = False

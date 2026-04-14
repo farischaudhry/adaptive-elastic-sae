@@ -240,6 +240,19 @@ def main() -> None:
             learning_rate=float(training_cfg["learning_rate"]),
             warmup_steps=int(training_cfg.get("warmup_steps", 10_000)),
             validation_log_interval=int(training_cfg.get("validation_log_interval", 1_000)),
+            geometry_log_interval=int(training_cfg.get("geometry_log_interval", 3_000)),
+            validation_num_batches=int(training_cfg.get("validation_num_batches", 100)),
+            online_validation_enabled=bool(
+                training_cfg.get("online_validation_enabled", True)
+            ),
+            final_validation_num_batches=(
+                int(training_cfg["final_validation_num_batches"])
+                if training_cfg.get("final_validation_num_batches") is not None
+                else None
+            ),
+            final_validation_enabled=bool(
+                training_cfg.get("final_validation_enabled", True)
+            ),
             enable_validation=enable_validation,
             log_interval=int(training_cfg.get("log_interval", 100)),
             device=device,
@@ -301,8 +314,6 @@ def main() -> None:
             )
 
             print(f"Completed {variant_name} (seed={seed})\n")
-
-    print("\nLLM sweep complete!\n")
 
 
 if __name__ == "__main__":
