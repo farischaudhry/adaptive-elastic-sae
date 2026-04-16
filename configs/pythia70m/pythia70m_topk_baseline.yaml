@@ -17,32 +17,32 @@ data:
     seq_len: 128
     lm_batch_size: 8
     streaming: true
-    skip_docs: 20000
+    skip_docs: 10000
     take_docs: null
     loop_dataset: true
 
   validation_online:
     dataset_split: train
-    skip_docs: 10000
+    skip_docs: 5000
     take_docs: 5000
     loop_dataset: true
 
   validation_final:
     dataset_split: train
     skip_docs: 0
-    take_docs: 10000
+    take_docs: 5000
     loop_dataset: false
 
 training:
-  num_steps: 10000
+  num_steps: 20000
   batch_size: 512
   learning_rate: 1.0e-3
-  warmup_steps: 2000
+  warmup_steps: 4000
   log_interval: 100
   enable_validation: true
   online_validation_enabled: true
   validation_log_interval: 1000
-  geometry_log_interval: 3000
+  geometry_log_interval: 1000
   validation_num_batches: 50
   final_validation_enabled: true
   device: cuda

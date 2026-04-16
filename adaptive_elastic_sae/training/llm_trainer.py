@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from logging import getLogger
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -33,6 +34,8 @@ from adaptive_elastic_sae.training.metrics import (
     weight_bimodality_ratio,
 )
 from adaptive_elastic_sae.training.trainer_utils import BatchProvider
+
+logger = getLogger(__name__)
 
 
 @dataclass
@@ -122,6 +125,9 @@ class LLMSAETrainer:
                     config=run_config,
                     reinit="finish_previous",
                 )
+                # Use training step as the canonical x-axis for all metrics.
+                wandb.define_metric("step")
+                wandb.define_metric("*", step_metric="step")
             except ImportError:
                 use_wandb = False
 
@@ -210,9 +216,9 @@ class LLMSAETrainer:
                 metrics_history.append(metrics)
 
                 if use_wandb:
-                    wandb.log(metrics)
+                    wandb.log(metrics, step=step + 1)
 
-                print(
+                logger.info(
                     f"Step {step + 1}/{self.config.num_steps} | "
                     f"Loss: {loss.item():.6f}"
                 )
@@ -230,7 +236,7 @@ class LLMSAETrainer:
                     label="val_online",
                 )
                 if use_wandb and val_metrics:
-                    wandb.log({**val_metrics, "step": step + 1})
+                    wandb.log({**val_metrics, "step": step + 1}, step=step + 1)
 
             # Geometry evals
             if (
@@ -242,7 +248,7 @@ class LLMSAETrainer:
                 if cond > 0:
                     geometry_metrics["log_active_condition_number"] = math.log10(cond)
                 if use_wandb and geometry_metrics:
-                    wandb.log({**geometry_metrics, "step": step + 1})
+                    wandb.log({**geometry_metrics, "step": step + 1}, step=step + 1)
 
         # Final validation on exhaustive set
         if (
@@ -256,7 +262,10 @@ class LLMSAETrainer:
                 label="val_final",
             )
             if use_wandb:
-                wandb.log(final_metrics)
+                wandb.log(
+                    {**final_metrics, "step": self.config.num_steps},
+                    step=self.config.num_steps,
+                )
 
             metrics_history.append({"step": "final", **final_metrics})
 
@@ -276,7 +285,7 @@ class LLMSAETrainer:
                 checkpoint_file,
             )
             saved_checkpoint_path = str(checkpoint_file)
-            print(f"Saved final checkpoint: {saved_checkpoint_path}")
+            logger.info(f"Saved final checkpoint: {saved_checkpoint_path}")
 
         if use_wandb:
             wandb.finish()

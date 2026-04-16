@@ -61,7 +61,8 @@ wandb:
   project: aen-sae-llm-llama8b
   entity: farischaudhry-imperial-college-london
   tags:
-    - llama-8b-test
+    - llama-8b
+    - test
 
 checkpoint:
   enabled: true

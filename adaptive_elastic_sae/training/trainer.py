@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any
+from logging import getLogger
 
 import torch
 from torch.optim import Adam
@@ -31,6 +32,7 @@ from adaptive_elastic_sae.training.trainer_utils import (
     TrainerConfig,
 )
 
+logger = getLogger(__name__)
 
 class SAETrainer:
     """
@@ -194,7 +196,7 @@ class SAETrainer:
                 if use_wandb:
                     wandb.log(metrics)
 
-                print(
+                logger.info(
                     f"Step {step + 1}/{self.config.num_steps} | "
                     f"Loss: {loss.item():.6f} | "
                     f"L0: {metrics['l0_active_features']:.2f} | "

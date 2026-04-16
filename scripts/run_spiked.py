@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from logging import getLogger
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,8 @@ from adaptive_elastic_sae.saes.polyhedral import (
 from adaptive_elastic_sae.saes.top_k import TopKSAE
 from adaptive_elastic_sae.training.trainer import SAETrainer, TrainerConfig
 
+logger = getLogger(__name__)
+    
 
 def load_config(config_path: str | Path) -> dict[str, Any]:
     """Load YAML config."""
@@ -119,7 +122,7 @@ def main() -> None:
 
     # Load config
     config = load_config(args.config)
-    print(f"Loaded config from {args.config}")
+    logger.info(f"Loaded config from {args.config}")
 
     # Extract sections
     data_cfg = config["data"]
@@ -131,9 +134,9 @@ def main() -> None:
     dtype_str = train_cfg.get("dtype", "float32")
     use_wandb = args.use_wandb and wandb_cfg.get("enabled", False)
 
-    print(f"\n{'=' * 80}")
-    print("SAE Spiked-Model Mechanistic Validation")
-    print(f"{'=' * 80}\n")
+    logger.info(f"\n{'=' * 80}")
+    logger.info("SAE Spiked-Model Mechanistic Validation")
+    logger.info(f"{'=' * 80}\n")
 
     # Get seeds from experiment config
     experiment_cfg = config.get("experiment", {})
@@ -141,16 +144,16 @@ def main() -> None:
 
     # Seed sweep
     for seed in seeds:
-        print(f"\n{'─' * 80}")
-        print(f"SEED = {seed}")
-        print(f"{'─' * 80}\n")
+        logger.info(f"\n{'─' * 80}")
+        logger.info(f"SEED = {seed}")
+        logger.info(f"{'─' * 80}\n")
 
         # Rho sweep
         rho_values = data_cfg.get("rho_values", [0.0, 0.5, 0.9])
         for rho in rho_values:
-            print(f"\n{'=' * 80}")
-            print(f"RHO = {rho:.2f}")
-            print(f"{'=' * 80}\n")
+            logger.info(f"\n{'=' * 80}")
+            logger.info(f"RHO = {rho:.2f}")
+            logger.info(f"{'=' * 80}\n")
 
             # Create data generator with current seed
             gen = SpikedDataGenerator(
@@ -167,17 +170,17 @@ def main() -> None:
 
             # Log dictionary statistics
             dict_stats = gen.dictionary_stats()
-            print(f"Dictionary stats (rho={rho:.2f}):")
+            logger.info(f"Dictionary stats (rho={rho:.2f}):")
             for k, v in dict_stats.items():
-                print(f"  {k}: {v:.4f}")
-            print()
+                logger.info(f"  {k}: {v:.4f}")
+            logger.info("")
             dict_stats_metadata = {f"dict_{k}": v for k, v in dict_stats.items()}
 
             # Train each model variant
             for model_name, model_config in models_cfg.items():
-                print(f"{'─' * 80}")
-                print(f"Training {model_name.upper()} on rho={rho:.2f}")
-                print(f"{'─' * 80}\n")
+                logger.info(f"{'─' * 80}")
+                logger.info(f"Training {model_name.upper()} on rho={rho:.2f}")
+                logger.info(f"{'─' * 80}\n")
 
                 # Instantiate model
                 model = instantiate_model(
@@ -227,7 +230,7 @@ def main() -> None:
                     run_tags=run_tags,
                 )
 
-                print(f"\nCompleted {model_name} on rho={rho:.2f}\n")
+                logger.info(f"\nCompleted {model_name} on rho={rho:.2f}\n")
 
 
 if __name__ == "__main__":

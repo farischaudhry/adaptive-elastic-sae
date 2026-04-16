@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import itertools
+from logging import getLogger
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,8 @@ from adaptive_elastic_sae.saes.top_k import TopKSAE
 from adaptive_elastic_sae.saes.vanilla import GhostVanillaSAE, VanillaSAE
 from adaptive_elastic_sae.training.llm_batch_provider import LLMActivationBatchProvider
 from adaptive_elastic_sae.training.llm_trainer import LLMTrainerConfig, LLMSAETrainer
+
+logger = getLogger(__name__)
 
 
 def load_config(config_path: str | Path) -> dict[str, Any]:
@@ -190,15 +193,15 @@ def main() -> None:
     seeds = experiment_cfg.get("seeds", [0])
     model_variants = build_model_variants(models_cfg)
 
-    print(f"Loaded config from {args.config}")
-    print(f"Expanded model variants: {len(model_variants)}")
+    logger.info(f"Loaded config from {args.config}")
+    logger.info(f"Expanded model variants: {len(model_variants)}")
 
     for seed in seeds:
         torch.manual_seed(seed)
 
-        print(f"\n{'=' * 80}")
-        print(f"SEED = {seed}")
-        print(f"{'=' * 80}\n")
+        logger.info(f"\n{'=' * 80}")
+        logger.info(f"SEED = {seed}")
+        logger.info(f"{'=' * 80}\n")
 
         # Streamers and providers
         train_streamer = make_streamer(
@@ -259,9 +262,9 @@ def main() -> None:
         )
 
         for variant_name, model_cfg in model_variants:
-            print(f"{'-' * 80}")
-            print(f"Training {variant_name}")
-            print(f"{'-' * 80}\n")
+            logger.info(f"{'-' * 80}")
+            logger.info(f"Training {variant_name}")
+            logger.info(f"{'-' * 80}\n")
 
             model = instantiate_model(
                 model_config=model_cfg,
@@ -312,7 +315,7 @@ def main() -> None:
                 run_metadata=run_metadata,
             )
 
-            print(f"Completed {variant_name} (seed={seed})\n")
+            logger.info(f"Completed {variant_name} (seed={seed})\n")
 
 
 if __name__ == "__main__":
