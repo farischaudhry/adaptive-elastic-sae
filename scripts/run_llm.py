@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import itertools
-from logging import getLogger
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,7 +24,15 @@ from adaptive_elastic_sae.saes.vanilla import GhostVanillaSAE, VanillaSAE
 from adaptive_elastic_sae.training.llm_batch_provider import LLMActivationBatchProvider
 from adaptive_elastic_sae.training.llm_trainer import LLMTrainerConfig, LLMSAETrainer
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
+
+
+def configure_logging(level_name: str = "INFO") -> None:
+    level = getattr(logging, level_name.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
 
 
 def load_config(config_path: str | Path) -> dict[str, Any]:
@@ -168,7 +176,15 @@ def main() -> None:
         action="store_true",
         help="Enable Weights & Biases logging",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        help="Python logging level (DEBUG, INFO, WARNING, ERROR)",
+    )
     args = parser.parse_args()
+
+    configure_logging(args.log_level)
 
     config = load_config(args.config)
 
@@ -241,6 +257,9 @@ def main() -> None:
             batch_size=int(training_cfg["batch_size"]),
             learning_rate=float(training_cfg["learning_rate"]),
             warmup_steps=int(training_cfg.get("warmup_steps", 10_000)),
+            max_activations_window=int(
+                training_cfg.get("max_activations_window", 10_000)
+            ),
             validation_log_interval=int(training_cfg.get("validation_log_interval", 1_000)),
             geometry_log_interval=int(training_cfg.get("geometry_log_interval", 3_000)),
             validation_num_batches=int(training_cfg.get("validation_num_batches", 100)),

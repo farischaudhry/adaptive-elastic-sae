@@ -247,3 +247,55 @@ def adaptive_weight_summary(
             100.0 * (w >= (float(weight_max) - bound_eps)).float().mean().item()
         )
     return metrics
+
+
+def feature_utilization_summary(
+    firing_rates: torch.Tensor,
+    prefix: str,
+    eps: float = 1e-12,
+) -> dict[str, float]:
+    """Summarize dictionary utilization and concentration from per-feature firing rates."""
+    if firing_rates.numel() == 0:
+        return {}
+
+    rates = torch.clamp(firing_rates.detach().float().reshape(-1), min=0.0)
+    n = rates.numel()
+    if n == 0:
+        return {}
+
+    metrics: dict[str, float] = {
+        f"{prefix}/active_feature_pct": 100.0 * (rates > eps).float().mean().item(),
+    }
+
+    metrics.update(summary_stats(rates, f"{prefix}/rate"))
+    log_rates = torch.log10(torch.clamp(rates, min=eps))
+    metrics.update(summary_stats(log_rates, f"{prefix}/log10_rate"))
+
+    rate_sum = rates.sum().item()
+    if rate_sum <= eps:
+        metrics[f"{prefix}/normalized_entropy"] = 0.0
+        metrics[f"{prefix}/top1pct_mass_pct"] = 0.0
+        metrics[f"{prefix}/top10pct_mass_pct"] = 0.0
+        metrics[f"{prefix}/gini"] = 0.0
+        return metrics
+
+    probs = rates / rate_sum
+    entropy = -(probs * torch.log(torch.clamp(probs, min=eps))).sum()
+    metrics[f"{prefix}/normalized_entropy"] = (
+        entropy / max(torch.log(torch.tensor(float(n), device=probs.device)), eps)
+    ).item()
+
+    sorted_probs, _ = torch.sort(probs, descending=True)
+    k1 = max(1, int(round(0.01 * n)))
+    k10 = max(1, int(round(0.10 * n)))
+    metrics[f"{prefix}/top1pct_mass_pct"] = 100.0 * sorted_probs[:k1].sum().item()
+    metrics[f"{prefix}/top10pct_mass_pct"] = 100.0 * sorted_probs[:k10].sum().item()
+
+    sorted_rates, _ = torch.sort(rates)
+    idx = torch.arange(1, n + 1, device=sorted_rates.device, dtype=sorted_rates.dtype)
+    gini_num = 2.0 * torch.sum(idx * sorted_rates)
+    gini_den = n * torch.clamp(sorted_rates.sum(), min=eps)
+    gini = gini_num / gini_den - (n + 1) / n
+    metrics[f"{prefix}/gini"] = float(gini.item())
+
+    return metrics

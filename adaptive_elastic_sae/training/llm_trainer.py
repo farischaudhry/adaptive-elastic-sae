@@ -25,7 +25,10 @@ from adaptive_elastic_sae.training.metrics import (
     adaptive_weight_summary,
     active_gram_spectrum,
     compute_cross_leverage,
+    dead_neuron_recovery_rate,
+    dead_neurons_pct,
     explained_variance,
+    feature_utilization_summary,
     feature_shrinkage_ratio,
     interaction_leakage_frobenius_approx,
     l0_active_features,
@@ -46,6 +49,7 @@ class LLMTrainerConfig:
     batch_size: int = 256
     learning_rate: float = 1e-3
     warmup_steps: int = 10_000
+    max_activations_window: int = 10_000
     log_interval: int = 100
     validation_log_interval: int = 1_000
     geometry_log_interval: int = 2_000
@@ -93,6 +97,14 @@ class LLMSAETrainer:
         self.model.to(self.device)
 
         self.optimizer = Adam(model.parameters(), lr=config.learning_rate)
+
+        # Track max feature activations over windows for persistent dead-neuron metrics.
+        self.max_activations = torch.zeros(
+            model.d_dict,
+            device=self.device,
+            dtype=config.dtype,
+        )
+        self.max_activations_history: list[torch.Tensor] = []
 
     def train(
         self,
@@ -161,6 +173,12 @@ class LLMSAETrainer:
             # Forward
             x_hat, h = self.model.forward(x)
 
+            # Track max activations for dead-neuron window metrics.
+            self.max_activations = torch.max(
+                self.max_activations,
+                h.abs().max(dim=0).values,
+            )
+
             # Loss (support both Tensor and (Tensor, dict) returns)
             loss_components: dict[str, float] = {}
             try:
@@ -200,6 +218,10 @@ class LLMSAETrainer:
                     "loss": loss.item(),
                     "throughput/steps_per_sec": steps_per_sec,
                     "throughput/tokens_per_sec": tokens_per_sec,
+                    "dead_neurons_pct_window": dead_neurons_pct(
+                        self.max_activations,
+                        eps=1e-12,
+                    ),
                 }
                 metrics.update(self._compute_grad_health())
                 metrics.update(self._compute_lightweight_metrics(x, x_hat, h))
@@ -222,6 +244,31 @@ class LLMSAETrainer:
                     f"Step {step + 1}/{self.config.num_steps} | "
                     f"Loss: {loss.item():.6f}"
                 )
+
+            # Windowed dead-neuron recovery logging.
+            if (step + 1) % self.config.max_activations_window == 0:
+                self.max_activations_history.append(self.max_activations.clone())
+
+                window_metrics = {
+                    "step": step + 1,
+                    "dead_neurons_pct_window": dead_neurons_pct(
+                        self.max_activations,
+                        eps=1e-12,
+                    ),
+                }
+                if len(self.max_activations_history) >= 2:
+                    recovery_rate = dead_neuron_recovery_rate(
+                        self.max_activations_history[-2],
+                        self.max_activations_history[-1],
+                        eps=1e-12,
+                    )
+                    window_metrics["dead_neuron_recovery_rate"] = recovery_rate
+                    window_metrics["dead_neuron_recovery_pct"] = 100.0 * recovery_rate
+
+                if use_wandb:
+                    wandb.log(window_metrics, step=step + 1)
+
+                self.max_activations.zero_()
 
             # LLM evals
             if (
@@ -315,6 +362,15 @@ class LLMSAETrainer:
             "l0_vs_l1_ratio": l0_vs_l1_ratio(h, eps=eps),
             "dead_features_pct_batch": dead_batch_pct,
         }
+
+        # Prefer persistent firing-EMA utilization when available; fallback to batch frequencies.
+        if hasattr(self.model, "firing_ema"):
+            firing_rates = self.model.firing_ema
+            util_prefix = "feature_utilization_ema"
+        else:
+            firing_rates = (h.abs() > eps).float().mean(dim=0)
+            util_prefix = "feature_utilization_batch"
+        metrics.update(feature_utilization_summary(firing_rates, prefix=util_prefix, eps=eps))
 
         if hasattr(self.model, "ema_abs_activations"):
             metrics["activation_effective_sample_size"] = activation_effective_sample_size(

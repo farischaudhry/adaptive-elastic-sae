@@ -15,7 +15,7 @@ data:
     text_field: text
     hook_layer: 3
     seq_len: 128
-    lm_batch_size: 8
+    lm_batch_size: 64
     streaming: true
     skip_docs: 10000
     take_docs: null
@@ -35,7 +35,7 @@ data:
 
 training:
   num_steps: 20000
-  batch_size: 512
+  batch_size: 8192  # 20k steps * 8k tokens = 163m tokens
   learning_rate: 1.0e-3
   warmup_steps: 4000
   log_interval: 100

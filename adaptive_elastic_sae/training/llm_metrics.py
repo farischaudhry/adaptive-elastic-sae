@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import torch
 
 from adaptive_elastic_sae.training.metrics import summary_stats
@@ -60,20 +62,37 @@ def evaluate_downstream_degradation(
         .mean()
     )
 
-    denom = (zero_loss - clean_loss).item()
-    if abs(denom) < 1e-12:
+    clean_loss_val = clean_loss.item()
+    patched_loss_val = patched_loss.item()
+    zero_loss_val = zero_loss.item()
+    kl_div_val = kl_div.item()
+
+    denom = zero_loss_val - clean_loss_val
+    if (not math.isfinite(denom)) or abs(denom) < 1e-12:
         ce_loss_recovered = 0.0
     else:
-        ce_loss_recovered = 1.0 - ((patched_loss - clean_loss).item() / denom)
+        ce_loss_recovered = 1.0 - ((patched_loss_val - clean_loss_val) / denom)
+
+    is_finite = all(
+        math.isfinite(v)
+        for v in (
+            clean_loss_val,
+            patched_loss_val,
+            zero_loss_val,
+            kl_div_val,
+            ce_loss_recovered,
+        )
+    )
 
     return {
-        "ce_loss_degradation": (patched_loss - clean_loss).item(),
+        "ce_loss_degradation": patched_loss_val - clean_loss_val,
         "ce_loss_recovered": ce_loss_recovered,
         "ce_loss_recovered_pct": 100.0 * ce_loss_recovered,
-        "kl_divergence": kl_div.item(),
-        "clean_loss": clean_loss.item(),
-        "patched_loss": patched_loss.item(),
-        "zero_loss": zero_loss.item(),
+        "kl_divergence": kl_div_val,
+        "clean_loss": clean_loss_val,
+        "patched_loss": patched_loss_val,
+        "zero_loss": zero_loss_val,
+        "is_finite": float(is_finite),
     }
 
 
@@ -85,13 +104,35 @@ def aggregate_downstream_degradation(
     if not results:
         return {}
 
-    ce_degradations = [r["ce_loss_degradation"] for r in results]
-    ce_recoveries = [r["ce_loss_recovered"] for r in results]
-    ce_recoveries_pct = [r["ce_loss_recovered_pct"] for r in results]
-    kl_divs = [r["kl_divergence"] for r in results]
-    clean_losses = [r["clean_loss"] for r in results]
-    patched_losses = [r["patched_loss"] for r in results]
-    zero_losses = [r["zero_loss"] for r in results]
+    required_keys = (
+        "ce_loss_degradation",
+        "ce_loss_recovered",
+        "ce_loss_recovered_pct",
+        "kl_divergence",
+        "clean_loss",
+        "patched_loss",
+        "zero_loss",
+    )
+    valid_results = [
+        r
+        for r in results
+        if all(math.isfinite(float(r[k])) for k in required_keys)
+    ]
+
+    skipped = len(results) - len(valid_results)
+    if not valid_results:
+        return {
+            f"{label}_valid_batches": 0.0,
+            f"{label}_skipped_batches": float(skipped),
+        }
+
+    ce_degradations = [r["ce_loss_degradation"] for r in valid_results]
+    ce_recoveries = [r["ce_loss_recovered"] for r in valid_results]
+    ce_recoveries_pct = [r["ce_loss_recovered_pct"] for r in valid_results]
+    kl_divs = [r["kl_divergence"] for r in valid_results]
+    clean_losses = [r["clean_loss"] for r in valid_results]
+    patched_losses = [r["patched_loss"] for r in valid_results]
+    zero_losses = [r["zero_loss"] for r in valid_results]
 
     metrics: dict[str, float] = {
         f"{label}_ce_loss_degradation": sum(ce_degradations) / len(ce_degradations),
@@ -102,6 +143,8 @@ def aggregate_downstream_degradation(
         f"{label}_clean_loss": sum(clean_losses) / len(clean_losses),
         f"{label}_patched_loss": sum(patched_losses) / len(patched_losses),
         f"{label}_zero_loss": sum(zero_losses) / len(zero_losses),
+        f"{label}_valid_batches": float(len(valid_results)),
+        f"{label}_skipped_batches": float(skipped),
     }
 
     metrics.update(summary_stats(ce_recoveries, f"{label}_ce_recovered"))

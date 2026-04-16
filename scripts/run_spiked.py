@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from logging import getLogger
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,8 +22,14 @@ from adaptive_elastic_sae.saes.polyhedral import (
 from adaptive_elastic_sae.saes.top_k import TopKSAE
 from adaptive_elastic_sae.training.trainer import SAETrainer, TrainerConfig
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
     
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
 
 def load_config(config_path: str | Path) -> dict[str, Any]:
     """Load YAML config."""
@@ -119,6 +125,8 @@ def main() -> None:
         help="Enable W&B logging",
     )
     args = parser.parse_args()
+
+    configure_logging()
 
     # Load config
     config = load_config(args.config)
