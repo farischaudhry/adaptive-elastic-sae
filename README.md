@@ -66,11 +66,11 @@ uv run scripts/run_spiked.py --config configs/spiked_model_regularization_ablati
 Pythia-70M test pattern:
 
 ```bash
-uv run scripts/run_llm.py --config configs/pythia70m/llm_pythia70m_test.yaml --use-wandb
+uv run scripts/run_llm.py --config configs/pythia70m/pythia70m_test.yaml --use-wandb
 ```
 
 Llama 3.1 8B test pattern:
 
 ```bash
-uv run scripts/run_llm.py --config configs/llama8b/llm_llama8b_test.yaml --use-wandb
+uv run scripts/run_llm.py --config configs/llama8b/llama8b_test.yaml --use-wandb
 ```
