@@ -229,10 +229,6 @@ def main() -> None:
 
                 print(f"\nCompleted {model_name} on rho={rho:.2f}\n")
 
-    print(f"\n{'=' * 80}")
-    print("Spiked-model sweep complete!")
-    print(f"{'=' * 80}\n")
-
 
 if __name__ == "__main__":
     main()
