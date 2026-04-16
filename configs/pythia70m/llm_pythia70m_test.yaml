@@ -3,7 +3,9 @@ experiment:
   seeds: [0]
 
 data:
-  d_dict: 512
+  # For Pythia-70M, the hidden dimension at layer 3 is 512.
+  # 8x expansion: 512 * 8 = 4096
+  d_dict: 4096
 
   train:
     tl_model_name: pythia-70m-deduped
@@ -46,6 +48,7 @@ training:
   final_validation_enabled: true
   device: cuda
   dtype: float32
+  model_dtype: float16
 
 models:
   vanilla_l1_test:
@@ -54,7 +57,7 @@ models:
 
 wandb:
   enabled: true
-  project: aen-sae-llm
+  project: aen-sae-llm-pythia70m
   entity: farischaudhry-imperial-college-london
   tags:
     - pythia-test

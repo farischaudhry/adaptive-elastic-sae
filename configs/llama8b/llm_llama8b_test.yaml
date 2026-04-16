@@ -1,0 +1,68 @@
+experiment:
+  name: llm_llama8b_test
+  seeds: [0]
+
+data:
+  # Llama-3.1-8B hidden dimension at layer 16 is 4096. 
+  # 32x expansion: 4096 * 32 = 131072
+  d_dict: 131072
+
+  train:
+    # Requires HF auth and model access.
+    tl_model_name: meta-llama/Llama-3.1-8B
+    hf_tokenizer_name: meta-llama/Llama-3.1-8B
+    dataset_name: NeelNanda/pile-10k
+    dataset_split: train
+    text_field: text
+    hook_layer: 16
+    seq_len: 64
+    lm_batch_size: 1
+    streaming: true
+    skip_docs: 0
+    take_docs: 2000
+    loop_dataset: true
+
+  validation_online:
+    dataset_split: train
+    skip_docs: 2000
+    take_docs: 1000
+    loop_dataset: true
+
+  validation_final:
+    dataset_split: train
+    skip_docs: 0
+    take_docs: 1000
+    loop_dataset: false
+
+training:
+  num_steps: 20
+  batch_size: 128
+  learning_rate: 5.0e-4
+  warmup_steps: 10
+  log_interval: 2
+  enable_validation: true
+  online_validation_enabled: true
+  validation_log_interval: 5
+  geometry_log_interval: 10
+  validation_num_batches: 2
+  final_validation_num_batches: 2
+  final_validation_enabled: true
+  device: cuda
+  dtype: float32
+  model_dtype: bfloat16
+
+models:
+  vanilla_l1_test:
+    class_name: VanillaSAE
+    lambda_1: 0.002
+
+wandb:
+  enabled: true
+  project: aen-sae-llm-llama8b
+  entity: farischaudhry-imperial-college-london
+  tags:
+    - llama-8b-test
+
+checkpoint:
+  enabled: true
+  dir: checkpoints/llm_llama8b_test

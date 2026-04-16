@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Entry point: train SAE variants on streamed Pythia activations with sweep support."""
-
 from __future__ import annotations
 
 import argparse
@@ -180,7 +177,9 @@ def main() -> None:
     checkpoint_cfg = config.get("checkpoint", {})
 
     device = training_cfg.get("device", "cuda")
-    model_dtype = str(training_cfg.get("dtype", "float32"))
+    model_dtype = str(
+        training_cfg.get("model_dtype", training_cfg.get("dtype", "float32"))
+    )
     dtype = torch_dtype_from_str(training_cfg.get("dtype", "float32"))
     use_wandb = args.use_wandb and wandb_cfg.get("enabled", False)
     checkpoint_enabled = bool(checkpoint_cfg.get("enabled", True))
