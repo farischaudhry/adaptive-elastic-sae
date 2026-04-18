@@ -284,6 +284,12 @@ class LLMSAETrainer:
                     n_batches=self.config.validation_num_batches,
                     label="val_online",
                 )
+                if val_metrics.get("val_online_valid_batches", 1.0) == 0.0:
+                    logger.warning(
+                        "Online validation produced 0 valid batches at step %d; "
+                        "check val_online_invalid_* metrics in W&B for root cause.",
+                        step + 1,
+                    )
                 if use_wandb and val_metrics:
                     wandb.log({**val_metrics, "step": step + 1}, step=step + 1)
 

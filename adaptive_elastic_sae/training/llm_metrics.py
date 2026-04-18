@@ -54,8 +54,11 @@ def evaluate_downstream_degradation(
         fwd_hooks=[(hook_name, zero_patch_hook)],
     )
 
-    log_probs_clean = torch.log_softmax(clean_logits, dim=-1)
-    log_probs_patched = torch.log_softmax(patched_logits, dim=-1)
+    # Compute KL in float32 for numerical stability under fp16 model execution.
+    clean_logits_f32 = clean_logits.float()
+    patched_logits_f32 = patched_logits.float()
+    log_probs_clean = torch.log_softmax(clean_logits_f32, dim=-1)
+    log_probs_patched = torch.log_softmax(patched_logits_f32, dim=-1)
     kl_div = (
         (torch.exp(log_probs_clean) * (log_probs_clean - log_probs_patched))
         .sum(dim=-1)
@@ -113,18 +116,26 @@ def aggregate_downstream_degradation(
         "patched_loss",
         "zero_loss",
     )
-    valid_results = [
-        r
-        for r in results
-        if all(math.isfinite(float(r[k])) for k in required_keys)
-    ]
+    invalid_counts = {k: 0 for k in required_keys}
+    valid_results = []
+    for r in results:
+        row_is_valid = True
+        for k in required_keys:
+            if not math.isfinite(float(r[k])):
+                invalid_counts[k] += 1
+                row_is_valid = False
+        if row_is_valid:
+            valid_results.append(r)
 
     skipped = len(results) - len(valid_results)
     if not valid_results:
-        return {
+        metrics = {
             f"{label}_valid_batches": 0.0,
             f"{label}_skipped_batches": float(skipped),
         }
+        for k, c in invalid_counts.items():
+            metrics[f"{label}_invalid_{k}"] = float(c)
+        return metrics
 
     ce_degradations = [r["ce_loss_degradation"] for r in valid_results]
     ce_recoveries = [r["ce_loss_recovered"] for r in valid_results]
@@ -146,6 +157,9 @@ def aggregate_downstream_degradation(
         f"{label}_valid_batches": float(len(valid_results)),
         f"{label}_skipped_batches": float(skipped),
     }
+
+    for k, c in invalid_counts.items():
+        metrics[f"{label}_invalid_{k}"] = float(c)
 
     metrics.update(summary_stats(ce_recoveries, f"{label}_ce_recovered"))
     metrics.update(summary_stats(ce_recoveries_pct, f"{label}_ce_recovered_pct"))
