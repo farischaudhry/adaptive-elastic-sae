@@ -150,6 +150,12 @@ class PythiaActivationStreamer:
     @torch.no_grad()
     def next_activation_block(self) -> torch.Tensor:
         tokens = self._next_token_batch()
-        _, cache = self._model.run_with_cache(tokens, names_filter=self.hook_name)
-        acts = cache[self.hook_name]
-        return acts.reshape(-1, acts.shape[-1])
+        _, cache = self._model.run_with_cache(
+            tokens,
+            names_filter=self.hook_name,
+            return_type=None,  # Skip vocabulary logit calculation
+        )
+        # Clone to detach from transformer_lens internal cache graph
+        acts = cache[self.hook_name].reshape(-1, cache[self.hook_name].shape[-1]).clone()
+        del cache  # Explicitly free the cache dict to release GPU references
+        return acts
