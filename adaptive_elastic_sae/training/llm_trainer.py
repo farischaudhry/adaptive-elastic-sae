@@ -173,11 +173,13 @@ class LLMSAETrainer:
             # Forward
             x_hat, h = self.model.forward(x)
 
-            # Track max activations for dead-neuron window metrics.
-            self.max_activations = torch.max(
-                self.max_activations,
-                h.abs().max(dim=0).values,
-            )
+            # Track max activations for dead-neuron window metrics without
+            # retaining autograd history across training steps.
+            with torch.no_grad():
+                self.max_activations = torch.maximum(
+                    self.max_activations,
+                    h.detach().abs().amax(dim=0),
+                )
 
             # Loss (support both Tensor and (Tensor, dict) returns)
             loss_components: dict[str, float] = {}
