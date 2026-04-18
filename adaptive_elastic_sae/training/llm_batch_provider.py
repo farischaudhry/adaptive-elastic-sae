@@ -40,18 +40,24 @@ class LLMActivationBatchProvider(BatchProvider):
         if self._buffer is None:
             self._ensure_buffer(block.shape[-1], block.device, block.dtype)
 
-        if block.dtype != self._buffer.dtype:
-            block = block.to(dtype=self._buffer.dtype)
+        write_block = block.to(device=self._buffer.device, dtype=self._buffer.dtype)
+
+        # If a block is larger than capacity, keep only the most recent rows.
+        if write_block.shape[0] > self.buffer_size:
+            write_block = write_block[-self.buffer_size :]
         
-        n_new = block.shape[0]
-        # Circular indices: handle wraparound
-        indices = torch.arange(
-            self._write_pos,
-            self._write_pos + n_new,
-            device=self._buffer.device,
-        ) % self.buffer_size
-        
-        self._buffer[indices] = block
+        n_new = write_block.shape[0]
+        space_left = self.buffer_size - self._write_pos
+
+        if n_new <= space_left:
+            # Fits contiguously without wrap.
+            self._buffer[self._write_pos : self._write_pos + n_new] = write_block
+        else:
+            # Wrap around and split into tail/head writes.
+            self._buffer[self._write_pos :] = write_block[:space_left]
+            remaining = n_new - space_left
+            self._buffer[:remaining] = write_block[space_left:]
+
         self._write_pos = (self._write_pos + n_new) % self.buffer_size
         self._valid_items = min(self._valid_items + n_new, self.buffer_size)
 
