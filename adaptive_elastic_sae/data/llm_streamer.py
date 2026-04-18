@@ -161,7 +161,7 @@ class PythiaActivationStreamer:
         tokens = self._next_token_batch()
         captured: torch.Tensor | None = None
 
-        def _capture_hook(act: torch.Tensor, _hook: Any) -> None:
+        def _capture_hook(act: torch.Tensor, hook: Any | None = None) -> None:
             nonlocal captured
             captured = act
 
