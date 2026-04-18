@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 import torch
 
@@ -33,13 +33,18 @@ class PythiaActivationStreamer:
     Uses continuous token packing for 0% pad tokens and stable context windows.
     """
 
-    def __init__(self, cfg: LLMStreamConfig) -> None:
+    def __init__(
+        self,
+        cfg: LLMStreamConfig,
+        shared_model: Any | None = None,
+        shared_tokenizer: Any | None = None,
+    ) -> None:
         self.cfg = cfg
         self.device = torch.device(cfg.device)
         self.hook_name = cfg.hook_name or f"blocks.{cfg.hook_layer}.hook_resid_post"
 
-        self._tokenizer = self._load_tokenizer()
-        self._model = self._load_model()
+        self._tokenizer = shared_tokenizer if shared_tokenizer is not None else self._load_tokenizer()
+        self._model = shared_model if shared_model is not None else self._load_model()
         self._dataset_iter = self._load_dataset_iterator()
 
         # Buffer State
@@ -144,18 +149,29 @@ class PythiaActivationStreamer:
     def model(self):
         return self._model
 
+    @property
+    def tokenizer(self):
+        return self._tokenizer
+
     def next_token_batch(self) -> torch.Tensor:
         return self._next_token_batch()
 
     @torch.no_grad()
     def next_activation_block(self) -> torch.Tensor:
         tokens = self._next_token_batch()
-        _, cache = self._model.run_with_cache(
+        captured: torch.Tensor | None = None
+
+        def _capture_hook(act: torch.Tensor, _hook: Any) -> None:
+            nonlocal captured
+            captured = act
+
+        self._model.run_with_hooks(
             tokens,
-            names_filter=self.hook_name,
             return_type=None,  # Skip vocabulary logit calculation
+            fwd_hooks=[(self.hook_name, _capture_hook)],
         )
-        # Clone to detach from transformer_lens internal cache graph
-        acts = cache[self.hook_name].reshape(-1, cache[self.hook_name].shape[-1]).clone()
-        del cache  # Explicitly free the cache dict to release GPU references
-        return acts
+
+        if captured is None:
+            raise RuntimeError(f"Failed to capture hook activations for {self.hook_name}")
+
+        return captured.reshape(-1, captured.shape[-1]).detach()

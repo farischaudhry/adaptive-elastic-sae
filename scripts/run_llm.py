@@ -154,13 +154,19 @@ def make_streamer(
     override_cfg: dict[str, Any] | None,
     device: str,
     model_dtype: str,
+    shared_model: Any | None = None,
+    shared_tokenizer: Any | None = None,
 ) -> PythiaActivationStreamer:
     cfg = dict(base_cfg)
     if override_cfg:
         cfg.update(override_cfg)
     cfg["device"] = device
     cfg["model_dtype"] = model_dtype
-    return PythiaActivationStreamer(LLMStreamConfig(**cfg))
+    return PythiaActivationStreamer(
+        LLMStreamConfig(**cfg),
+        shared_model=shared_model,
+        shared_tokenizer=shared_tokenizer,
+    )
 
 
 def main() -> None:
@@ -238,12 +244,16 @@ def main() -> None:
                 override_cfg=data_cfg.get("validation_online", {}),
                 device=device,
                 model_dtype=model_dtype,
+                shared_model=train_streamer.model,
+                shared_tokenizer=train_streamer.tokenizer,
             )
             final_streamer = make_streamer(
                 base_cfg=data_cfg["train"],
                 override_cfg=data_cfg.get("validation_final", {}),
                 device=device,
                 model_dtype=model_dtype,
+                shared_model=train_streamer.model,
+                shared_tokenizer=train_streamer.tokenizer,
             )
             validation_provider_online = LLMActivationBatchProvider(online_streamer)
             validation_provider_final = LLMActivationBatchProvider(final_streamer)
