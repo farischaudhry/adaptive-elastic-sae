@@ -1,7 +1,6 @@
 experiment:
-  name: spiked_model
+  name: spiked_model_high_rho
   seeds: [0, 1, 2]
-
 
 data:
   n_dim: 256
@@ -9,10 +8,10 @@ data:
   k_sparse: 16
   noise_std: 0.0
   allow_negative_codes: false
-  rho_values: [0.0, 0.3, 0.5, 0.7, 0.9]
+  rho_values: [0.9]
 
 training:
-  num_steps: 50_000
+  num_steps: 30_000
   batch_size: 256
   learning_rate: 1.0e-3
   warmup_steps: 10_000
@@ -26,28 +25,34 @@ models:
     class_name: VanillaSAE
     lambda_1: 0.006
 
-  elastic_net:
-    class_name: ElasticNetSAE
-    lambda_1: 0.006
-    lambda_2: 0.003
-
-  adaptive_lasso:
-    class_name: AdaptiveLassoSAE
-    lambda_1: 0.006
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
-    ref_k_top_pct: 0.01
-
-  adaptive_elastic_net:
+  aen_base:
     class_name: AdaptiveElasticNetSAE
     lambda_1: 0.006
     lambda_2: 0.003
     gamma: 0.5
-    ema_beta: 0.999
+    ema_beta: 0.9999
     weight_min: 0.1
     weight_max: 10.0
+    ref_k_top_pct: 0.01
+
+  aen_increase_l2_weight:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.006
+    lambda_2: 0.1 
+    gamma: 0.5
+    ema_beta: 0.9999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.01
+
+  aen_lower_max_weight:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: 0.006
+    lambda_2: 0.003
+    gamma: 0.5
+    ema_beta: 0.9999
+    weight_min: 0.1
+    weight_max: 1.5
     ref_k_top_pct: 0.01
 
 wandb:
@@ -55,6 +60,4 @@ wandb:
   project: aen-sae-mechanistic
   entity: farischaudhry-imperial-college-london
   tags:
-    - experiment-1.1-main
-  run_tag_templates:
-    - "rho={rho:.2f}"
+    - experiment-1.1-extreme-rho

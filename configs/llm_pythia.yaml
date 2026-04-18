@@ -1,0 +1,74 @@
+experiment:
+  name: llm_pythia_sweep
+  seeds: [0]
+
+data:
+  # Optional override. If omitted, inferred from hooked layer width.
+  # n_dim: 512
+  d_dict: 4096
+
+  train:
+    tl_model_name: pythia-70m-deduped
+    hf_tokenizer_name: EleutherAI/pythia-70m-deduped
+    dataset_name: NeelNanda/pile-10k
+    dataset_split: train
+    text_field: text
+    hook_layer: 3
+    # hook_name: blocks.3.hook_resid_post
+    seq_len: 128
+    lm_batch_size: 8
+    streaming: true
+    skip_docs: 15000
+    take_docs: null
+    loop_dataset: true
+
+  # These are merged on top of `data.train`.
+  validation_online:
+    dataset_split: train
+    skip_docs: 10000
+    take_docs: 5000
+    loop_dataset: true
+
+  validation_final:
+    dataset_split: train
+    skip_docs: 0
+    take_docs: 10000
+    loop_dataset: false
+
+training:
+  num_steps: 10000
+  batch_size: 512
+  learning_rate: 1.0e-3
+  warmup_steps: 2000
+  log_interval: 100
+  enable_validation: true
+  validation_log_interval: 1000
+  device: cuda
+  dtype: float32
+
+models:
+  # Lists trigger Cartesian sweep expansion.
+  vanilla_l1:
+    class_name: VanillaSAE
+    lambda_1: [0.002, 0.004, 0.006]
+
+  adaptive_elastic_net:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: [0.002, 0.004]
+    lambda_2: [0.001, 0.003]
+    gamma: 0.5
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.01
+
+wandb:
+  enabled: true
+  project: aen-sae-llm
+  entity: farischaudhry-imperial-college-london
+  tags:
+    - experiment-1.2-sweep
+
+checkpoint:
+  enabled: true
+  dir: checkpoints/llm_pythia

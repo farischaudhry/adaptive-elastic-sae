@@ -21,19 +21,27 @@ class LLMActivationBatchProvider(BatchProvider):
         self._valid_items: int = 0
         self.tokens_seen: int = 0
 
-    def _ensure_buffer(self, d_model: int, device: torch.device | str) -> None:
+    def _ensure_buffer(
+        self,
+        d_model: int,
+        device: torch.device | str,
+        dtype: torch.dtype,
+    ) -> None:
         """Lazily allocate circular buffer once on first activation block."""
         if self._buffer is None:
             self._buffer = torch.zeros(
                 (self.buffer_size, d_model),
                 device=device,
-                dtype=torch.float32,
+                dtype=dtype,
             )
 
     def _append_block(self, block: torch.Tensor) -> None:
         """Add activation block to circular buffer without copying existing data."""
         if self._buffer is None:
-            self._ensure_buffer(block.shape[-1], block.device)
+            self._ensure_buffer(block.shape[-1], block.device, block.dtype)
+
+        if block.dtype != self._buffer.dtype:
+            block = block.to(dtype=self._buffer.dtype)
         
         n_new = block.shape[0]
         # Circular indices: handle wraparound

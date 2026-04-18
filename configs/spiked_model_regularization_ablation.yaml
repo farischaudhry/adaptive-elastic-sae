@@ -1,146 +1,146 @@
-experiment:
-  name: spiked_model_ablation
-  seeds: [0, 1, 2]
+# experiment:
+#   name: spiked_model_ablation
+#   seeds: [0, 1, 2]
 
-data:
-  n_dim: 256
-  d_dict: 1024
-  k_sparse: 16
-  noise_std: 0.0
-  allow_negative_codes: false
-  rho_values: [0.0, 0.7, 0.99]
+# data:
+#   n_dim: 256
+#   d_dict: 1024
+#   k_sparse: 16
+#   noise_std: 0.0
+#   allow_negative_codes: false
+#   rho_values: [0.0, 0.7, 0.99]
 
-training:
-  num_steps: 30_000
-  batch_size: 256
-  learning_rate: 1.0e-3
-  warmup_steps: 10_000
-  max_activations_window: 10_000
-  log_interval: 500
-  device: cuda
-  dtype: float32
+# training:
+#   num_steps: 30_000
+#   batch_size: 256
+#   learning_rate: 1.0e-3
+#   warmup_steps: 10_000
+#   max_activations_window: 10_000
+#   log_interval: 500
+#   device: cuda
+#   dtype: float32
 
-models:
-  # --- Vanilla L1 Ablations ---
-  vanilla_l1_lam0p008:
-    class_name: VanillaSAE
-    lambda_1: 0.008
+# models:
+#   # --- Vanilla L1 Ablations ---
+#   vanilla_l1_lam0p008:
+#     class_name: VanillaSAE
+#     lambda_1: 0.008
 
-  vanilla_l1_lam0p004:
-    class_name: VanillaSAE
-    lambda_1: 0.004
+#   vanilla_l1_lam0p004:
+#     class_name: VanillaSAE
+#     lambda_1: 0.004
 
-  # --- Adaptive Lasso Ablations ---
-  adaptive_lasso_lam0p008:
-    class_name: AdaptiveLassoSAE
-    lambda_1: 0.008
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
+#   # --- Adaptive Lasso Ablations ---
+#   adaptive_lasso_lam0p008:
+#     class_name: AdaptiveLassoSAE
+#     lambda_1: 0.008
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
 
-  adaptive_lasso_lam0p004:
-    class_name: AdaptiveLassoSAE
-    lambda_1: 0.004
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
+#   adaptive_lasso_lam0p004:
+#     class_name: AdaptiveLassoSAE
+#     lambda_1: 0.004
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
 
-  adaptive_lasso_gamma1:
-    class_name: AdaptiveLassoSAE
-    lambda_1: 0.006
-    gamma: 1
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
+#   adaptive_lasso_gamma1:
+#     class_name: AdaptiveLassoSAE
+#     lambda_1: 0.006
+#     gamma: 1
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
 
-  # --- Elastic Net Ablations ---
-  elastic_net_l1_0p008_l2_0p004:
-    class_name: ElasticNetSAE
-    lambda_1: 0.008
-    lambda_2: 0.004
+#   # --- Elastic Net Ablations ---
+#   elastic_net_l1_0p008_l2_0p004:
+#     class_name: ElasticNetSAE
+#     lambda_1: 0.008
+#     lambda_2: 0.004
 
-  elastic_net_l1_0p004_l2_0p002:
-    class_name: ElasticNetSAE
-    lambda_1: 0.004
-    lambda_2: 0.002
+#   elastic_net_l1_0p004_l2_0p002:
+#     class_name: ElasticNetSAE
+#     lambda_1: 0.004
+#     lambda_2: 0.002
 
-  # --- Adaptive Elastic Net Ablations ---
-  adaptive_elastic_net_l1_0p008_l2_0p004:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.008
-    lambda_2: 0.004
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
+#   # --- Adaptive Elastic Net Ablations ---
+#   adaptive_elastic_net_l1_0p008_l2_0p004:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.008
+#     lambda_2: 0.004
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
 
-  adaptive_elastic_net_l1_0p004_l2_0p002:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.004
-    lambda_2: 0.002
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
+#   adaptive_elastic_net_l1_0p004_l2_0p002:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.004
+#     lambda_2: 0.002
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
 
-  adaptive_elastic_net_gamma1:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.006
-    lambda_2: 0.003
-    gamma: 1
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
+#   adaptive_elastic_net_gamma1:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.006
+#     lambda_2: 0.003
+#     gamma: 1
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
 
-    # --- Anchor (Reference K%) Ablations ---
-  adaptive_elastic_net_anchor_10pct:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.006
-    lambda_2: 0.003
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
-    ref_k_top_pct: 0.10
+#     # --- Anchor (Reference K%) Ablations ---
+#   adaptive_elastic_net_anchor_10pct:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.006
+#     lambda_2: 0.003
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
+#     ref_k_top_pct: 0.10
 
-  adaptive_elastic_net_anchor_0p1pct:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.006
-    lambda_2: 0.003
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
-    ref_k_top_pct: 0.001
+#   adaptive_elastic_net_anchor_0p1pct:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.006
+#     lambda_2: 0.003
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
+#     ref_k_top_pct: 0.001
 
-  # --- Isolated L2 Curvature Ablations ---
-  adaptive_elastic_net_high_l2:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.006
-    lambda_2: 0.012 
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
-    ref_k_top_pct: 0.01
+#   # --- Isolated L2 Curvature Ablations ---
+#   adaptive_elastic_net_high_l2:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.006
+#     lambda_2: 0.012
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
+#     ref_k_top_pct: 0.01
 
-  adaptive_elastic_net_low_l2:
-    class_name: AdaptiveElasticNetSAE
-    lambda_1: 0.006      
-    lambda_2: 0.0005
-    gamma: 0.5
-    ema_beta: 0.999
-    weight_min: 0.1
-    weight_max: 10.0
-    ref_k_top_pct: 0.01
+#   adaptive_elastic_net_low_l2:
+#     class_name: AdaptiveElasticNetSAE
+#     lambda_1: 0.006
+#     lambda_2: 0.0005
+#     gamma: 0.5
+#     ema_beta: 0.999
+#     weight_min: 0.1
+#     weight_max: 10.0
+#     ref_k_top_pct: 0.01
 
-wandb:
-  enabled: true
-  project: aen-sae-mechanistic
-  entity: farischaudhry-imperial-college-london
-  tags:
-    - experiment-1.1-regularization-ablation
-  run_tag_templates:
-    - "rho={rho:.2f}"
+# wandb:
+#   enabled: true
+#   project: aen-sae-mechanistic
+#   entity: farischaudhry-imperial-college-london
+#   tags:
+#     - experiment-1.1-regularization-ablation
+#   run_tag_templates:
+#     - "rho={rho:.2f}"

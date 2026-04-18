@@ -1,0 +1,78 @@
+experiment:
+  name: llm_llama7b_full
+  seeds: [0, 1, 2]
+
+data:
+  # Llama-3.1-8B hidden width is 4096.
+  d_dict: 4096
+
+  train:
+    tl_model_name: meta-llama/Llama-3.1-8B
+    hf_tokenizer_name: meta-llama/Llama-3.1-8B
+    # Replace with your final full-scale corpus if needed.
+    dataset_name: monology/pile-uncopyrighted
+    dataset_split: train
+    text_field: text
+    hook_layer: 8
+    seq_len: 128
+    lm_batch_size: 4
+    streaming: true
+    skip_docs: 0
+    take_docs: null
+    loop_dataset: true
+
+  validation_online:
+    dataset_split: train
+    skip_docs: 200000
+    take_docs: 20000
+    loop_dataset: true
+
+  validation_final:
+    dataset_split: train
+    skip_docs: 0
+    take_docs: 50000
+    loop_dataset: false
+
+training:
+  num_steps: 10000
+  batch_size: 512
+  learning_rate: 1.0e-3
+  warmup_steps: 2000
+  log_interval: 100
+  enable_validation: true
+  online_validation_enabled: true
+  validation_log_interval: 1000
+  geometry_log_interval: 3000
+  validation_num_batches: 50
+  final_validation_num_batches: 200
+  final_validation_enabled: true
+  device: cuda
+  dtype: float32
+  model_dtype: float16
+
+models:
+  vanilla_l1:
+    class_name: VanillaSAE
+    lambda_1: [0.001, 0.002, 0.004]
+
+  adaptive_elastic_net:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: [0.001, 0.002]
+    lambda_2: [0.001, 0.003]
+    gamma: 0.5
+    ema_beta: 0.999
+    weight_min: 0.1
+    weight_max: 10.0
+    ref_k_top_pct: 0.01
+
+wandb:
+  enabled: true
+  project: aen-sae-llm
+  entity: farischaudhry-imperial-college-london
+  tags:
+    - llama-7b-full
+    - matched-token-budget
+
+checkpoint:
+  enabled: true
+  dir: checkpoints/llm_llama7b
