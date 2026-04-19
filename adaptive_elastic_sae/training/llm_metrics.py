@@ -10,9 +10,19 @@ from adaptive_elastic_sae.training.metrics import summary_stats
 
 
 def _safe_next_token_ce(logits: torch.Tensor, tokens: torch.Tensor) -> torch.Tensor:
-    """Compute next-token CE from logits with explicit finite-value sanitization."""
+    """Compute next-token CE with raw semantics and finite-value fallback."""
     shifted_logits = logits[:, :-1, :].contiguous().float()
     shifted_targets = tokens[:, 1:].contiguous()
+
+    raw_ce = F.cross_entropy(
+        shifted_logits.reshape(-1, shifted_logits.size(-1)),
+        shifted_targets.reshape(-1),
+        reduction="mean",
+    )
+    if torch.isfinite(raw_ce):
+        return raw_ce
+
+    # Fallback only when numerics are broken under extreme ablations.
     shifted_logits = torch.nan_to_num(
         shifted_logits,
         nan=0.0,
