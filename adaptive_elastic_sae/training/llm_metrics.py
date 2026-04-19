@@ -4,8 +4,27 @@ import math
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 
 from adaptive_elastic_sae.training.metrics import summary_stats
+
+
+def _safe_next_token_ce(logits: torch.Tensor, tokens: torch.Tensor) -> torch.Tensor:
+    """Compute next-token CE from logits with explicit finite-value sanitization."""
+    shifted_logits = logits[:, :-1, :].contiguous().float()
+    shifted_targets = tokens[:, 1:].contiguous()
+    shifted_logits = torch.nan_to_num(
+        shifted_logits,
+        nan=0.0,
+        posinf=80.0,
+        neginf=-80.0,
+    )
+    shifted_logits = torch.clamp(shifted_logits, min=-80.0, max=80.0)
+    return F.cross_entropy(
+        shifted_logits.reshape(-1, shifted_logits.size(-1)),
+        shifted_targets.reshape(-1),
+        reduction="mean",
+    )
 
 
 @torch.no_grad()
@@ -14,6 +33,7 @@ def evaluate_downstream_degradation(
     sae,
     tokens: torch.Tensor,
     hook_name: str,
+    ablation_mode: str = "batch_mean",
     verbose_nan_debug: bool = False,
 ) -> dict[str, float]:
     """
@@ -25,7 +45,6 @@ def evaluate_downstream_degradation(
         verbose_nan_debug: If True, log which values are NaN/Inf (for debugging)
     """
     clean_logits = llm(tokens)
-    clean_loss = llm(tokens, return_type="loss")
 
     def sae_patch_hook(
         activations: torch.Tensor,
@@ -64,30 +83,51 @@ def evaluate_downstream_degradation(
         tokens,
         fwd_hooks=[(hook_name, sae_patch_hook)],
     )
-    patched_loss = llm.run_with_hooks(
-        tokens,
-        return_type="loss",
-        fwd_hooks=[(hook_name, sae_patch_hook)],
-    )
 
-    # Zero-ablation baseline for normalized CE recovery metric.
-    def zero_patch_hook(
+    # Baseline ablation for normalized CE recovery metric.
+    def baseline_patch_hook(
         activations: torch.Tensor,
         hook=None,
     ) -> torch.Tensor:
-        return torch.zeros_like(activations)
+        if ablation_mode == "zero":
+            return torch.zeros_like(activations)
+        if ablation_mode == "batch_mean":
+            # Mean over batch and sequence dimensions, preserving feature dimension.
+            mean_acts = activations.mean(dim=(0, 1), keepdim=True)
+            return mean_acts.expand_as(activations)
+        raise ValueError(
+            f"Unsupported ablation_mode '{ablation_mode}'. "
+            "Expected one of: 'zero', 'batch_mean'."
+        )
 
-    zero_loss = llm.run_with_hooks(
+    zero_logits = llm.run_with_hooks(
         tokens,
-        return_type="loss",
-        fwd_hooks=[(hook_name, zero_patch_hook)],
+        fwd_hooks=[(hook_name, baseline_patch_hook)],
     )
 
-    # Compute KL in float32 for numerical stability under fp16 model execution.
+    clean_loss = _safe_next_token_ce(clean_logits, tokens)
+    patched_loss = _safe_next_token_ce(patched_logits, tokens)
+    zero_loss = _safe_next_token_ce(zero_logits, tokens)
+
+    # Compute KL in float32 with finite-value sanitization.
     clean_logits_f32 = clean_logits.float()
     patched_logits_f32 = patched_logits.float()
+    clean_logits_f32 = torch.nan_to_num(
+        clean_logits_f32,
+        nan=0.0,
+        posinf=80.0,
+        neginf=-80.0,
+    )
+    patched_logits_f32 = torch.nan_to_num(
+        patched_logits_f32,
+        nan=0.0,
+        posinf=80.0,
+        neginf=-80.0,
+    )
     log_probs_clean = torch.log_softmax(clean_logits_f32, dim=-1)
     log_probs_patched = torch.log_softmax(patched_logits_f32, dim=-1)
+    log_probs_clean = torch.clamp(log_probs_clean, min=-100.0, max=0.0)
+    log_probs_patched = torch.clamp(log_probs_patched, min=-100.0, max=0.0)
     kl_div = (
         (torch.exp(log_probs_clean) * (log_probs_clean - log_probs_patched))
         .sum(dim=-1)
@@ -146,6 +186,7 @@ def aggregate_downstream_degradation(
     if not results:
         return {}
 
+    # Core metrics required for a batch to be considered valid.
     required_keys = (
         "ce_loss_degradation",
         "ce_loss_recovered",
@@ -153,9 +194,11 @@ def aggregate_downstream_degradation(
         "kl_divergence",
         "clean_loss",
         "patched_loss",
-        "zero_loss",
     )
-    invalid_counts = {k: 0 for k in required_keys}
+    # Diagnostic-only metric: zero-ablation can be unstable for some hooks/models.
+    optional_keys = ("zero_loss",)
+    tracked_keys = required_keys + optional_keys
+    invalid_counts = {k: 0 for k in tracked_keys}
     valid_results = []
     
     if verbose_nan_debug and len(results) > 0:
@@ -166,11 +209,12 @@ def aggregate_downstream_degradation(
     for batch_idx, r in enumerate(results):
         row_is_valid = True
         batch_invalid_keys = []
-        for k in required_keys:
+        for k in tracked_keys:
             if not math.isfinite(float(r[k])):
                 invalid_counts[k] += 1
-                row_is_valid = False
                 batch_invalid_keys.append(k)
+                if k in required_keys:
+                    row_is_valid = False
         
         if verbose_nan_debug and batch_invalid_keys:
             import logging
@@ -205,7 +249,11 @@ def aggregate_downstream_degradation(
     kl_divs = [r["kl_divergence"] for r in valid_results]
     clean_losses = [r["clean_loss"] for r in valid_results]
     patched_losses = [r["patched_loss"] for r in valid_results]
-    zero_losses = [r["zero_loss"] for r in valid_results]
+    finite_zero_losses = [
+        float(r["zero_loss"])
+        for r in valid_results
+        if math.isfinite(float(r["zero_loss"]))
+    ]
 
     metrics: dict[str, float] = {
         f"{label}_ce_loss_degradation": sum(ce_degradations) / len(ce_degradations),
@@ -215,10 +263,13 @@ def aggregate_downstream_degradation(
         f"{label}_kl_div": sum(kl_divs) / len(kl_divs),
         f"{label}_clean_loss": sum(clean_losses) / len(clean_losses),
         f"{label}_patched_loss": sum(patched_losses) / len(patched_losses),
-        f"{label}_zero_loss": sum(zero_losses) / len(zero_losses),
         f"{label}_valid_batches": float(len(valid_results)),
         f"{label}_skipped_batches": float(skipped),
+        f"{label}_zero_loss_valid_batches": float(len(finite_zero_losses)),
     }
+
+    if finite_zero_losses:
+        metrics[f"{label}_zero_loss"] = sum(finite_zero_losses) / len(finite_zero_losses)
 
     for k, c in invalid_counts.items():
         metrics[f"{label}_invalid_{k}"] = float(c)

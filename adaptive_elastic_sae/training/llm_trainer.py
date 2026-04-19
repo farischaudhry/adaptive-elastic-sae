@@ -57,6 +57,7 @@ class LLMTrainerConfig:
     online_validation_enabled: bool = True
     final_validation_enabled: bool = True
     final_validation_num_batches: int | None = None
+    validation_ablation_mode: str = "batch_mean"
     enable_validation: bool = False
     device: str | torch.device = "cuda"
     dtype: torch.dtype = torch.float32
@@ -525,6 +526,7 @@ class LLMSAETrainer:
                     self.model,
                     tokens,
                     self.hook_name,
+                    ablation_mode=self.config.validation_ablation_mode,
                     verbose_nan_debug=True,
                 )
                 downstream_results.append(result)

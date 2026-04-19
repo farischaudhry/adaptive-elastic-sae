@@ -284,6 +284,9 @@ def main() -> None:
             final_validation_enabled=bool(
                 training_cfg.get("final_validation_enabled", True)
             ),
+            validation_ablation_mode=str(
+                training_cfg.get("validation_ablation_mode", "batch_mean")
+            ),
             enable_validation=enable_validation,
             log_interval=int(training_cfg.get("log_interval", 100)),
             device=device,
