@@ -488,6 +488,21 @@ class LLMSAETrainer:
         ):
             downstream_results: list[dict[str, float]] = []
 
+            # Check SAE health before validation
+            has_nan = False
+            has_inf = False
+            for name, param in self.model.named_parameters():
+                if torch.isnan(param).any():
+                    has_nan = True
+                    logger.debug(f"SAE parameter {name} contains NaN")
+                if torch.isinf(param).any():
+                    has_inf = True
+                    logger.debug(f"SAE parameter {name} contains Inf")
+            if has_nan or has_inf:
+                logger.warning(f"SAE health check FAILED: nan={has_nan}, inf={has_inf}, returning empty metrics")
+                self.model.train()
+                return {}
+
             # If split loops forever and n_batches is unspecified, cap for safety.
             loop_dataset = getattr(getattr(token_streamer, "cfg", None), "loop_dataset", True)
             eval_batches: int | None
@@ -510,6 +525,7 @@ class LLMSAETrainer:
                     self.model,
                     tokens,
                     self.hook_name,
+                    verbose_nan_debug=True,
                 )
                 downstream_results.append(result)
                 batch_count += 1
@@ -522,6 +538,7 @@ class LLMSAETrainer:
             metrics: dict[str, float] = aggregate_downstream_degradation(
                 downstream_results,
                 label,
+                verbose_nan_debug=True,
             )
 
             if hasattr(self.model, "get_adaptive_weights"):
