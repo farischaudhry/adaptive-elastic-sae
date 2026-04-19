@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import torch
 
@@ -102,7 +103,7 @@ def evaluate_downstream_degradation(
 def aggregate_downstream_degradation(
     results: list[dict[str, float]],
     label: str,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Aggregate batch-level downstream degradation metrics with uncertainty summaries."""
     if not results:
         return {}
@@ -161,9 +162,27 @@ def aggregate_downstream_degradation(
     for k, c in invalid_counts.items():
         metrics[f"{label}_invalid_{k}"] = float(c)
 
-    metrics.update(summary_stats(ce_recoveries, f"{label}_ce_recovered"))
-    metrics.update(summary_stats(ce_recoveries_pct, f"{label}_ce_recovered_pct"))
-    metrics.update(summary_stats(kl_divs, f"{label}_kl_div"))
+    metrics.update(
+        summary_stats(
+            ce_recoveries,
+            f"{label}_ce_recovered",
+            include_histogram=True,
+        )
+    )
+    metrics.update(
+        summary_stats(
+            ce_recoveries_pct,
+            f"{label}_ce_recovered_pct",
+            include_histogram=True,
+        )
+    )
+    metrics.update(
+        summary_stats(
+            kl_divs,
+            f"{label}_kl_div",
+            include_histogram=True,
+        )
+    )
     return metrics
 
 

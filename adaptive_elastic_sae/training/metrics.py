@@ -167,14 +167,47 @@ def explained_variance(
     return (1.0 - residual_var / total_var).item()
 
 
+
 @torch.no_grad()
-def mean_max_cosine_similarity(decoder: torch.Tensor, eps: float = 1e-12) -> float:
-    """For each decoder atom, average cosine similarity to its nearest neighbor."""
+def dictionary_coherence_summary(
+    decoder: torch.Tensor,
+    eps: float = 1e-12,
+) -> dict[str, Any]:
+    """Summarize nearest-neighbor dictionary coherence and its distribution.
+
+    Coherence is defined per atom as the maximum cosine similarity to any
+    other atom in the dictionary. We also report the global max absolute
+    off-diagonal cosine similarity as a worst-case dictionary coherence scalar.
+    """
+    if decoder.numel() == 0 or decoder.shape[1] == 0:
+        return {
+            "mean_max_cosine_similarity": 0.0,
+            "dictionary_coherence_nn_max": 0.0,
+            "dictionary_coherence_abs_max": 0.0,
+        }
+
     d = decoder / torch.clamp(decoder.norm(dim=0, keepdim=True), min=eps)
     sim = d.T @ d
-    sim.fill_diagonal_(-1.0)
-    max_sim, _ = sim.max(dim=1)
-    return max_sim.mean().item()
+
+    # Per-atom nearest-neighbor coherence.
+    nn_sim = sim.clone()
+    nn_sim.fill_diagonal_(-1.0)
+    nn_max, _ = nn_sim.max(dim=1)
+
+    # Global absolute pairwise coherence, excluding diagonal self-similarity.
+    abs_sim = sim.abs()
+    abs_sim.fill_diagonal_(0.0)
+
+    metrics = summary_stats(
+        nn_max,
+        "dictionary_coherence_nn",
+        include_histogram=True,
+        histogram_key="dictionary_coherence_histogram",
+    )
+    metrics["mean_max_cosine_similarity"] = nn_max.mean().item()
+    metrics["dictionary_coherence_nn_max"] = nn_max.max().item()
+    metrics["dictionary_coherence_abs_max"] = abs_sim.max().item()
+    return metrics
 
 
 def activation_effective_sample_size(
@@ -202,7 +235,9 @@ def weight_bimodality_ratio(
 def summary_stats(
     values: list[float] | torch.Tensor,
     prefix: str,
-) -> dict[str, float]:
+    include_histogram: bool = False,
+    histogram_key: str | None = None,
+) -> dict[str, Any]:
     """Return mean/std/p10/p50/p90 summaries for scalar samples."""
     if isinstance(values, list):
         if len(values) == 0:
@@ -215,13 +250,25 @@ def summary_stats(
 
     q = torch.tensor([0.1, 0.5, 0.9], device=tensor.device, dtype=tensor.dtype)
     quantiles = torch.quantile(tensor, q)
-    return {
+    metrics: dict[str, Any] = {
         f"{prefix}/mean": tensor.mean().item(),
         f"{prefix}/std": tensor.std(unbiased=False).item(),
         f"{prefix}/p10": quantiles[0].item(),
         f"{prefix}/p50": quantiles[1].item(),
         f"{prefix}/p90": quantiles[2].item(),
     }
+
+    if include_histogram:
+        try:
+            import wandb
+
+            metrics[histogram_key or f"{prefix}/histogram"] = wandb.Histogram(
+                tensor.detach().cpu().numpy()
+            )
+        except Exception:
+            pass
+
+    return metrics
 
 
 def adaptive_weight_summary(
@@ -230,13 +277,13 @@ def adaptive_weight_summary(
     weight_min: float | None = None,
     weight_max: float | None = None,
     bound_eps: float = 1e-4,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Quantile and bound-hit summaries for adaptive feature weights."""
     if weights.numel() == 0:
         return {}
 
     w = weights.detach().float().reshape(-1)
-    metrics = summary_stats(w, prefix)
+    metrics = summary_stats(w, prefix, include_histogram=True)
 
     if weight_min is not None:
         metrics[f"{prefix}/pinned_min_pct"] = (
@@ -253,7 +300,7 @@ def feature_utilization_summary(
     firing_rates: torch.Tensor,
     prefix: str,
     eps: float = 1e-12,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Summarize dictionary utilization and concentration from per-feature firing rates."""
     if firing_rates.numel() == 0:
         return {}
@@ -267,9 +314,11 @@ def feature_utilization_summary(
         f"{prefix}/active_feature_pct": 100.0 * (rates > eps).float().mean().item(),
     }
 
-    metrics.update(summary_stats(rates, f"{prefix}/rate"))
+    metrics.update(summary_stats(rates, f"{prefix}/rate", include_histogram=True))
     log_rates = torch.log10(torch.clamp(rates, min=eps))
-    metrics.update(summary_stats(log_rates, f"{prefix}/log10_rate"))
+    metrics.update(
+        summary_stats(log_rates, f"{prefix}/log10_rate", include_histogram=True)
+    )
 
     rate_sum = rates.sum().item()
     if rate_sum <= eps:

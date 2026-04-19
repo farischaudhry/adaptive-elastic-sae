@@ -16,10 +16,10 @@ from adaptive_elastic_sae.training.metrics import (
     dead_neurons_pct,
     explained_variance,
     feature_shrinkage_ratio,
+    dictionary_coherence_summary,
     interaction_leakage_frobenius_approx,
     l0_active_features,
     l0_vs_l1_ratio,
-    mean_max_cosine_similarity,
     weight_bimodality_ratio,
 )
 from adaptive_elastic_sae.training.gpu_metrics import (
@@ -312,9 +312,6 @@ class SAETrainer:
                 )
             )
 
-            metrics["mean_max_cosine_similarity"] = mean_max_cosine_similarity(
-                decoder,
-                eps=1e-12,
-            )
+            metrics.update(dictionary_coherence_summary(decoder, eps=1e-12))
 
         return metrics

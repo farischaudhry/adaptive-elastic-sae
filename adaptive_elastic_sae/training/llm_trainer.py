@@ -28,12 +28,12 @@ from adaptive_elastic_sae.training.metrics import (
     dead_neuron_recovery_rate,
     dead_neurons_pct,
     explained_variance,
+    dictionary_coherence_summary,
     feature_utilization_summary,
     feature_shrinkage_ratio,
     interaction_leakage_frobenius_approx,
     l0_active_features,
     l0_vs_l1_ratio,
-    mean_max_cosine_similarity,
     weight_bimodality_ratio,
 )
 from adaptive_elastic_sae.training.trainer_utils import BatchProvider
@@ -621,7 +621,7 @@ class LLMSAETrainer:
         metrics["interaction_leakage_frobenius"] = interaction_leakage_frobenius_approx(
             d, active_mask
         )
-        metrics["mean_max_cosine_similarity"] = mean_max_cosine_similarity(d, eps=eps)
+        metrics.update(dictionary_coherence_summary(d, eps=eps))
 
         leverage_stats = compute_cross_leverage(d, active_mask, eps=eps)
         metrics["mean_h_j"] = float(leverage_stats["mean_h_j"])
