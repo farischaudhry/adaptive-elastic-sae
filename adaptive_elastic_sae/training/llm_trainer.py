@@ -482,6 +482,19 @@ class LLMSAETrainer:
         if token_streamer is None:
             token_streamer = self.validation_token_streamer
 
+        # Non-loop validation streams (e.g., final validation) are finite and can be
+        # exhausted by prior runs/variants. Reset so each evaluation gets a fresh pass.
+        loop_dataset = getattr(getattr(token_streamer, "cfg", None), "loop_dataset", True)
+        if token_streamer is not None and not loop_dataset and hasattr(token_streamer, "reset_stream"):
+            try:
+                token_streamer.reset_stream()
+            except Exception as e:
+                logger.warning(
+                    "%s: failed to reset non-loop validation stream before eval (%s)",
+                    label,
+                    e,
+                )
+
         if (
             self.llm is not None
             and self.hook_name is not None
@@ -505,7 +518,6 @@ class LLMSAETrainer:
                 return {}
 
             # If split loops forever and n_batches is unspecified, cap for safety.
-            loop_dataset = getattr(getattr(token_streamer, "cfg", None), "loop_dataset", True)
             eval_batches: int | None
             if n_batches is not None:
                 eval_batches = n_batches
@@ -527,20 +539,58 @@ class LLMSAETrainer:
                     tokens,
                     self.hook_name,
                     ablation_mode=self.config.validation_ablation_mode,
-                    verbose_nan_debug=True,
+                    verbose_nan_debug=False,
                 )
                 downstream_results.append(result)
                 batch_count += 1
 
             if batch_count == 0:
+                # One defensive retry for finite streams: transient iterator state can
+                # occasionally produce an empty read despite available documents.
+                if token_streamer is not None and not loop_dataset and hasattr(token_streamer, "reset_stream"):
+                    try:
+                        token_streamer.reset_stream()
+                        tokens = token_streamer.next_token_batch()
+                        result = evaluate_downstream_degradation(
+                            self.llm,
+                            self.model,
+                            tokens,
+                            self.hook_name,
+                            ablation_mode=self.config.validation_ablation_mode,
+                            verbose_nan_debug=False,
+                        )
+                        downstream_results.append(result)
+                        batch_count = 1
+                    except StopIteration:
+                        pass
+                    except Exception as e:
+                        logger.warning(
+                            "%s: validation retry after reset failed (%s)",
+                            label,
+                            e,
+                        )
+
+            if batch_count == 0:
+                cfg = getattr(token_streamer, "cfg", None)
+                logger.warning(
+                    "%s: validation produced zero batches (loop_dataset=%s, skip_docs=%s, take_docs=%s)",
+                    label,
+                    loop_dataset,
+                    getattr(cfg, "skip_docs", None),
+                    getattr(cfg, "take_docs", None),
+                )
                 self.model.train()
-                return {}
+                return {
+                    f"{label}_valid_batches": 0.0,
+                    f"{label}_skipped_batches": 0.0,
+                    f"{label}_empty_stream": 1.0,
+                }
 
             self.model.train()
             metrics: dict[str, float] = aggregate_downstream_degradation(
                 downstream_results,
                 label,
-                verbose_nan_debug=True,
+                verbose_nan_debug=False,
             )
 
             if hasattr(self.model, "get_adaptive_weights"):

@@ -156,6 +156,12 @@ class PythiaActivationStreamer:
     def next_token_batch(self) -> torch.Tensor:
         return self._next_token_batch()
 
+    def reset_stream(self) -> None:
+        """Reset dataset iterator and token buffer so finite streams can be reused."""
+        self._dataset_iter = self._load_dataset_iterator()
+        self._token_buffer = []
+        self._buffered_token_count = 0
+
     @torch.no_grad()
     def next_activation_block(self) -> torch.Tensor:
         tokens = self._next_token_batch()
