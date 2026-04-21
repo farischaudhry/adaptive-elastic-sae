@@ -93,5 +93,5 @@ wandb:
     - regularization
 
 checkpoint:
-  enabled: true
+  enabled: false
   dir: checkpoints/llm_pythia_regularization
