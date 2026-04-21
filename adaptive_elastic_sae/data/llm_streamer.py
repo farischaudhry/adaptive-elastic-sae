@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 import torch
 
@@ -24,7 +25,26 @@ class LLMStreamConfig:
     take_docs: int | None = None
     loop_dataset: bool = True
     model_dtype: str = "float32"
+    activation_normalization: Literal["none", "per_token_l2", "global_scale"] = "none"
     device: str | torch.device = "cuda"
+
+
+def normalize_activations(x: torch.Tensor, mode: Literal["none", "per_token_l2", "global_scale"], d_model: int) -> torch.Tensor:
+    """Normalize streamed activations according to the configured input regime."""
+    if mode == "none":
+        return x
+
+    eps = 1e-6
+    if mode == "per_token_l2":
+        token_norms = torch.norm(x, p=2, dim=-1, keepdim=True).clamp_min(eps)
+        target_norm = math.sqrt(d_model)
+        return x * (target_norm / token_norms)
+
+    if mode == "global_scale":
+        batch_scale = torch.norm(x, p=2, dim=-1).mean().clamp_min(eps)
+        return x / batch_scale
+
+    raise ValueError(f"Unknown activation_normalization mode: {mode}")
 
 
 class PythiaActivationStreamer:
@@ -180,4 +200,9 @@ class PythiaActivationStreamer:
         if captured is None:
             raise RuntimeError(f"Failed to capture hook activations for {self.hook_name}")
 
-        return captured.reshape(-1, captured.shape[-1]).detach()
+        activations = captured.reshape(-1, captured.shape[-1]).detach()
+        return normalize_activations(
+            activations,
+            mode=self.cfg.activation_normalization,
+            d_model=activations.shape[-1],
+        )

@@ -1,6 +1,6 @@
 experiment:
-  name: llm_pythia_topk_baseline
-  seeds: [0, 1, 2]
+  name: llm_pythia_regularization
+  seeds: [2]
 
 data:
   # Pythia-70M hidden dimension is 512.
@@ -52,9 +52,37 @@ training:
   model_dtype: float16
 
 models:
-  topk_baseline:
-    class_name: TopKSAE
-    k: [8, 16, 32, 64, 128, 256]
+  # Vanilla baseline
+  vanilla_l1:
+    class_name: VanillaSAE
+    lambda_1: [0.05, 0.01, 0.005, 0.001, 0.0005]
+
+  # Elastic net
+  elastic_net:
+    class_name: ElasticNetSAE
+    lambda_1: [0.01, 0.005, 0.001]
+    lambda_2: [0.005, 0.001, 0.0005, 0.0001]
+
+  # Adaptive LASSO
+  adaptive_lasso:
+    class_name: AdaptiveLassoSAE
+    lambda_1: [0.01, 0.005, 0.001]
+    gamma: [0.5, 1.0]
+    ema_beta: [0.999, 0.9999]
+    weight_min: 0.01
+    weight_max: 10.0
+    ref_k_top_pct: [0.05, 0.01, 0.005]
+
+  # Adaptive elastic net
+  adaptive_elastic_net:
+    class_name: AdaptiveElasticNetSAE
+    lambda_1: [0.01, 0.005, 0.001]
+    lambda_2: [0.005, 0.001, 0.0005, 0.0001]
+    gamma: [0.5, 1.0]
+    ema_beta: [0.999, 0.9999]
+    weight_min: 0.01
+    weight_max: 10.0
+    ref_k_top_pct: [0.05, 0.01, 0.005]
 
 wandb:
   enabled: true
@@ -62,8 +90,8 @@ wandb:
   entity: farischaudhry-imperial-college-london
   tags:
     - pythia-70m
-    - baseline-topk
+    - regularization
 
 checkpoint:
   enabled: true
-  dir: checkpoints/llm_pythia_topk
+  dir: checkpoints/llm_pythia_regularization

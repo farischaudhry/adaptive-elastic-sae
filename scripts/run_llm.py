@@ -325,6 +325,9 @@ def main() -> None:
                 "n_dim": n_dim,
                 "hook_name": train_streamer.hook_name,
                 "tl_model_name": data_cfg["train"].get("tl_model_name", "pythia-70m-deduped"),
+                "activation_normalization": data_cfg["train"].get(
+                    "activation_normalization", "none"
+                ),
             }
             for k, v in model_cfg.items():
                 if k != "class_name":

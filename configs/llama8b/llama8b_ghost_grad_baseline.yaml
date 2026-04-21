@@ -1,5 +1,5 @@
 experiment:
-  name: llm_llama8b_test
+  name: llm_llama8b_ghost_grad_baseline
   seeds: [0]
 
 data:
@@ -11,35 +11,35 @@ data:
     # Requires HF auth and model access.
     tl_model_name: meta-llama/Llama-3.1-8B
     hf_tokenizer_name: meta-llama/Llama-3.1-8B
-    dataset_name: NeelNanda/pile-10k
+    dataset_name: EleutherAI/the_pile_deduplicated
     dataset_split: train
     text_field: text
     hook_layer: 16
-    seq_len: 64
-    lm_batch_size: 1
+    seq_len: 128
+    lm_batch_size: 16
     streaming: true
-    skip_docs: 0
-    take_docs: 2000
+    skip_docs: 50000
+    take_docs: null
     loop_dataset: true
     activation_normalization: per_token_l2
 
   validation_online:
     dataset_split: train
-    skip_docs: 2000
-    take_docs: 1000
+    skip_docs: 20000
+    take_docs: 30000
     loop_dataset: true
 
   validation_final:
     dataset_split: train
     skip_docs: 0
-    take_docs: 1000
+    take_docs: 20000
     loop_dataset: false
 
 training:
-  num_steps: 20
-  batch_size: 128
+  num_steps: 200000
+  batch_size: 4096  # 200k steps * 4k tokens = 800m tokens
   learning_rate: 5.0e-4
-  warmup_steps: 10
+  warmup_steps: 4000
   log_interval: 2
   enable_validation: true
   online_validation_enabled: true
@@ -53,9 +53,14 @@ training:
   model_dtype: bfloat16
 
 models:
-  vanilla_l1_test:
-    class_name: VanillaSAE
-    lambda_1: 0.002
+  ghost_grad_baseline:
+    class_name: GhostVanillaSAE
+    lambda_1: [0.01, 0.005, 0.001, 0.0005, 0.0001]
+    ghost_scale: 1.0 
+    persistent_dead_threshold: 1.0e-6
+    ghost_activation: "softplus"
+    firing_ema_beta: 0.999
+    min_steps_before_ghost: 1000
 
 wandb:
   enabled: true
@@ -63,8 +68,8 @@ wandb:
   entity: farischaudhry-imperial-college-london
   tags:
     - llama-8b
-    - test
+    - baseline-ghost-grad
 
 checkpoint:
   enabled: true
-  dir: checkpoints/llm_llama8b_test
+  dir: checkpoints/llm_llama8b_ghost_grad

@@ -20,6 +20,7 @@ data:
     skip_docs: 2000
     take_docs: null
     loop_dataset: true
+    activation_normalization: per_token_l2
 
   validation_online:
     dataset_split: train
