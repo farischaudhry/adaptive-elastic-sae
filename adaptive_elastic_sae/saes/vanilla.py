@@ -114,10 +114,10 @@ class GhostVanillaSAE(VanillaSAE):
         if self.ghost_scale > 0.0 and self._step_count >= self.min_steps_before_ghost:
             # Use detached residual to avoid coupling ghost target dynamics to decoder updates.
             residual = (x - x_hat).detach()
-            residual_centered = residual - self.b_dec.detach()
 
             dead_mask = persistent_dead_mask_vec.float().unsqueeze(0).expand_as(h)
-            proxy_logits = self.encoder(residual_centered)
+            # Residual is already in reconstruction-error coordinates; avoid re-centering with b_dec.
+            proxy_logits = self.encoder(residual)
             proxy_acts = self._ghost_proxy_activations(proxy_logits) * dead_mask
 
             # Reconstruct residual using raw decoder map (without adding bias term).
