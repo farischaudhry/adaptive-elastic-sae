@@ -29,16 +29,22 @@ def dead_neuron_recovery_rate(
 
 @torch.no_grad()
 def interaction_leakage_frobenius_approx(
-    decoder: torch.Tensor, active_mask: torch.Tensor
+    decoder: torch.Tensor,
+    active_mask: torch.Tensor,
+    max_active_features: int = 4096,
 ) -> float:
     """Approximate leakage as ||D_Ac^T D_A||_F (avoids unstable inverse term)."""
     if active_mask.dtype != torch.bool:
         active_mask = active_mask.bool()
 
-    active_count = active_mask.sum().item()
-    inactive_count = (~active_mask).sum().item()
+    active_count = int(active_mask.sum().item())
+    inactive_count = int((~active_mask).sum().item())
     if active_count == 0 or inactive_count == 0:
         return 0.0
+
+    # Skip unstable/expensive blocks before materializing huge products.
+    if active_count > max_active_features:
+        return float("nan")
 
     d_a = decoder[:, active_mask]
     d_ac = decoder[:, ~active_mask]
@@ -98,7 +104,11 @@ def active_gram_spectrum(
 
 @torch.no_grad()
 def compute_cross_leverage(
-    decoder: torch.Tensor, active_mask: torch.Tensor, k_top: int = 5, eps: float = 1e-12
+    decoder: torch.Tensor,
+    active_mask: torch.Tensor,
+    k_top: int = 5,
+    eps: float = 1e-12,
+    max_active_features: int = 4096,
 ) -> dict[str, Any]:
     """
     Computes h_j(A) = (1/n) ||P_A a_j||^2.
@@ -108,6 +118,15 @@ def compute_cross_leverage(
         return {
             "mean_h_j": 0.0,
             "total_h_j": 0.0,
+            "shadowed_ids": [],
+            "shadowed_scores": [],
+        }
+
+    active_count = int(active_mask.sum().item())
+    if active_count > max_active_features:
+        return {
+            "mean_h_j": float("nan"),
+            "total_h_j": float("nan"),
             "shadowed_ids": [],
             "shadowed_scores": [],
         }
@@ -191,32 +210,66 @@ def explained_variance(
 @torch.no_grad()
 def dictionary_coherence_summary(
     decoder: torch.Tensor,
-    eps: float = 1e-12,
+    eps: float = 1e-10,
+    chunk_size: int = 1024,
 ) -> dict[str, Any]:
-    """Summarize nearest-neighbor dictionary coherence and its distribution.
+    """Summarize dictionary coherence without materializing a full NxN matrix.
 
-    Coherence is defined per atom as the maximum cosine similarity to any
-    other atom in the dictionary. We also report the global max absolute
-    off-diagonal cosine similarity as a worst-case dictionary coherence scalar.
+    Coherence is defined per atom as the maximum absolute cosine similarity to
+    any other atom in the dictionary.
     """
     if decoder.numel() == 0 or decoder.shape[1] == 0:
         return {
             "mean_max_cosine_similarity": 0.0,
             "dictionary_coherence_nn_max": 0.0,
             "dictionary_coherence_abs_max": 0.0,
+            "dictionary_coherence_used_features": 0.0,
+            "dictionary_coherence_total_features": 0.0,
+            "dictionary_coherence_subsampled": 0.0,
+            "dictionary_coherence_overall_mean": 0.0,
+        }
+
+    total_features = int(decoder.shape[1])
+    if total_features <= 1:
+        return {
+            "mean_max_cosine_similarity": 0.0,
+            "dictionary_coherence_nn_max": 0.0,
+            "dictionary_coherence_abs_max": 0.0,
+            "dictionary_coherence_used_features": float(total_features),
+            "dictionary_coherence_total_features": float(total_features),
+            "dictionary_coherence_subsampled": 0.0,
+            "dictionary_coherence_overall_mean": 0.0,
         }
 
     d = decoder / torch.clamp(decoder.norm(dim=0, keepdim=True), min=eps)
-    sim = d.T @ d
 
-    # Per-atom nearest-neighbor coherence.
-    nn_sim = sim.clone()
-    nn_sim.fill_diagonal_(-1.0)
-    nn_max, _ = nn_sim.max(dim=1)
+    max_chunks: list[torch.Tensor] = []
+    mean_chunks: list[torch.Tensor] = []
+    global_abs_max = torch.tensor(0.0, device=d.device)
 
-    # Global absolute pairwise coherence, excluding diagonal self-similarity.
-    abs_sim = sim.abs()
-    abs_sim.fill_diagonal_(0.0)
+    step = max(1, int(chunk_size))
+    for i in range(0, total_features, step):
+        end_i = min(i + step, total_features)
+        d_chunk = d[:, i:end_i]
+
+        # Shape: (chunk, d_dict)
+        sim_chunk = d_chunk.T @ d
+        abs_chunk = sim_chunk.abs()
+
+        # Remove self-similarity entries for rows represented by this chunk.
+        local_rows = torch.arange(end_i - i, device=d.device)
+        global_cols = torch.arange(i, end_i, device=d.device)
+        abs_chunk[local_rows, global_cols] = 0.0
+
+        row_max = abs_chunk.max(dim=1).values
+        row_mean = abs_chunk.sum(dim=1) / float(total_features - 1)
+
+        max_chunks.append(row_max)
+        mean_chunks.append(row_mean)
+        global_abs_max = torch.maximum(global_abs_max, row_max.max())
+
+    nn_max = torch.cat(max_chunks)
+    mean_abs = torch.cat(mean_chunks)
 
     metrics = summary_stats(
         nn_max,
@@ -226,7 +279,11 @@ def dictionary_coherence_summary(
     )
     metrics["mean_max_cosine_similarity"] = nn_max.mean().item()
     metrics["dictionary_coherence_nn_max"] = nn_max.max().item()
-    metrics["dictionary_coherence_abs_max"] = abs_sim.max().item()
+    metrics["dictionary_coherence_abs_max"] = global_abs_max.item()
+    metrics["dictionary_coherence_overall_mean"] = mean_abs.mean().item()
+    metrics["dictionary_coherence_used_features"] = float(total_features)
+    metrics["dictionary_coherence_total_features"] = float(total_features)
+    metrics["dictionary_coherence_subsampled"] = 0.0
     return metrics
 
 
