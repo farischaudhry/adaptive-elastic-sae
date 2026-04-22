@@ -54,7 +54,7 @@ training:
 models:
   ghost_grad_baseline:
     class_name: GhostVanillaSAE
-    lambda_1: [0.01, 0.005, 0.001, 0.0005, 0.0001]
+    lambda_1: [0.005, 0.001, 0.0005, 0.0001]
     ghost_scale: 0.1 
     persistent_dead_threshold: 1.0e-6
     ghost_activation: "softplus"
