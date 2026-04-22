@@ -65,7 +65,7 @@ wandb:
     - baseline-topk
 
 checkpoint:
-  enabled: true
+  enabled: false
   dir: checkpoints/llm_llama8b_topk
   hf_upload:
     enabled: true

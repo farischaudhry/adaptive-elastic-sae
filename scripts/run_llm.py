@@ -271,8 +271,13 @@ def main() -> None:
     hf_upload_cfg = checkpoint_cfg.get("hf_upload", {})
     hf_upload_enabled = bool(hf_upload_cfg.get("enabled", False))
     hf_upload_final_only = bool(hf_upload_cfg.get("upload_final_only", True))
+    hf_staging_dir = Path(
+        hf_upload_cfg.get("staging_dir", "/tmp/adaptive-elastic-sae-hf-checkpoints")
+    )
     if checkpoint_enabled:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    elif hf_upload_enabled and hf_upload_final_only:
+        hf_staging_dir.mkdir(parents=True, exist_ok=True)
 
     seeds = experiment_cfg.get("seeds", [0])
     model_variants = build_model_variants(models_cfg)
@@ -399,10 +404,15 @@ def main() -> None:
             tags.append(f"seed={seed}")
             tags.append(f"variant={variant_name}")
 
+            persistent_checkpoint_path = (
+                str(checkpoint_dir / f"{run_name}.pt") if checkpoint_enabled else None
+            )
+            staged_checkpoint_path = None
+            if persistent_checkpoint_path is None and hf_upload_enabled and hf_upload_final_only:
+                staged_checkpoint_path = str(hf_staging_dir / f"{run_name}.pt")
+
             train_result = trainer.train(
-                checkpoint_path=(
-                    str(checkpoint_dir / f"{run_name}.pt") if checkpoint_enabled else None
-                ),
+                checkpoint_path=persistent_checkpoint_path or staged_checkpoint_path,
                 use_wandb=use_wandb,
                 run_name=run_name,
                 wandb_config={
@@ -421,6 +431,22 @@ def main() -> None:
                     seed=seed,
                     variant_name=variant_name,
                 )
+
+            if staged_checkpoint_path is not None:
+                staged_file = Path(staged_checkpoint_path)
+                if staged_file.exists():
+                    try:
+                        staged_file.unlink()
+                        logger.info(
+                            "Removed staged checkpoint after upload: %s",
+                            staged_checkpoint_path,
+                        )
+                    except OSError as exc:
+                        logger.warning(
+                            "Failed to remove staged checkpoint %s: %s",
+                            staged_checkpoint_path,
+                            exc,
+                        )
 
             logger.info(f"Completed {variant_name} (seed={seed})\n")
 

@@ -70,7 +70,7 @@ wandb:
     - baseline-ghost-grad
 
 checkpoint:
-  enabled: true
+  enabled: false
   dir: checkpoints/llm_llama8b_ghost_grad
   hf_upload:
     enabled: true
