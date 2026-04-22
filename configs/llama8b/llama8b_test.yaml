@@ -68,3 +68,9 @@ wandb:
 checkpoint:
   enabled: true
   dir: checkpoints/llm_llama8b_test
+  hf_upload:
+    enabled: true
+    repo_id: farischaudhry/llm-llama8b-test-checkpoints
+    private: true
+    path_prefix: checkpoints/llama8b_test
+    upload_final_only: true

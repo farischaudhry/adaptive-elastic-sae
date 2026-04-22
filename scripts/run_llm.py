@@ -169,6 +169,65 @@ def make_streamer(
     )
 
 
+def upload_checkpoint_to_hf(
+    checkpoint_path: str,
+    hf_upload_cfg: dict[str, Any],
+    *,
+    run_name: str,
+    seed: int,
+    variant_name: str,
+) -> None:
+    """Upload a local checkpoint file to Hugging Face Hub.
+
+    This function is intentionally non-fatal: any upload issues are logged and
+    training continues with the local checkpoint still preserved.
+    """
+    try:
+        from huggingface_hub import HfApi
+    except ImportError:
+        logger.warning(
+            "Skipping HF upload for %s because huggingface_hub is not installed.",
+            run_name,
+        )
+        return
+
+    repo_id = hf_upload_cfg.get("repo_id")
+    if not repo_id:
+        logger.warning(
+            "Skipping HF upload for %s because checkpoint.hf_upload.repo_id is missing.",
+            run_name,
+        )
+        return
+
+    path_prefix = str(hf_upload_cfg.get("path_prefix", "checkpoints")).strip("/")
+    checkpoint_file = Path(checkpoint_path)
+    if not checkpoint_file.exists():
+        logger.warning(
+            "Skipping HF upload for %s because checkpoint file does not exist: %s",
+            run_name,
+            checkpoint_file,
+        )
+        return
+
+    path_parts = [part for part in [path_prefix, f"seed{seed}", variant_name] if part]
+    path_in_repo = "/".join(path_parts + [checkpoint_file.name])
+    private_repo = bool(hf_upload_cfg.get("private", True))
+
+    try:
+        api = HfApi()
+        api.create_repo(repo_id=repo_id, repo_type="model", private=private_repo, exist_ok=True)
+        api.upload_file(
+            path_or_fileobj=str(checkpoint_file),
+            path_in_repo=path_in_repo,
+            repo_id=repo_id,
+            repo_type="model",
+            commit_message=f"Upload checkpoint for {run_name}",
+        )
+        logger.info("Uploaded checkpoint to HF Hub: %s/%s", repo_id, path_in_repo)
+    except Exception as exc:
+        logger.warning("HF upload failed for %s: %s", run_name, exc)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run LLM SAE training with sweep support")
     parser.add_argument(
@@ -209,6 +268,9 @@ def main() -> None:
     use_wandb = args.use_wandb and wandb_cfg.get("enabled", False)
     checkpoint_enabled = bool(checkpoint_cfg.get("enabled", True))
     checkpoint_dir = Path(checkpoint_cfg.get("dir", "checkpoints/llm_pythia"))
+    hf_upload_cfg = checkpoint_cfg.get("hf_upload", {})
+    hf_upload_enabled = bool(hf_upload_cfg.get("enabled", False))
+    hf_upload_final_only = bool(hf_upload_cfg.get("upload_final_only", True))
     if checkpoint_enabled:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -337,7 +399,7 @@ def main() -> None:
             tags.append(f"seed={seed}")
             tags.append(f"variant={variant_name}")
 
-            trainer.train(
+            train_result = trainer.train(
                 checkpoint_path=(
                     str(checkpoint_dir / f"{run_name}.pt") if checkpoint_enabled else None
                 ),
@@ -349,6 +411,16 @@ def main() -> None:
                 },
                 run_metadata=run_metadata,
             )
+
+            checkpoint_path = train_result.get("checkpoint_path")
+            if checkpoint_path and hf_upload_enabled and hf_upload_final_only:
+                upload_checkpoint_to_hf(
+                    checkpoint_path=checkpoint_path,
+                    hf_upload_cfg=hf_upload_cfg,
+                    run_name=run_name,
+                    seed=seed,
+                    variant_name=variant_name,
+                )
 
             logger.info(f"Completed {variant_name} (seed={seed})\n")
 

@@ -40,13 +40,12 @@ training:
   batch_size: 4096  # 200k steps * 4k tokens = 800m tokens
   learning_rate: 5.0e-4
   warmup_steps: 4000
-  log_interval: 2
+  log_interval: 100
   enable_validation: true
   online_validation_enabled: true
-  validation_log_interval: 5
-  geometry_log_interval: 10
-  validation_num_batches: 2
-  final_validation_num_batches: 2
+  validation_log_interval: 1000
+  geometry_log_interval: 1000
+  validation_num_batches: 100
   final_validation_enabled: true
   device: cuda
   dtype: float32
@@ -68,3 +67,9 @@ wandb:
 checkpoint:
   enabled: true
   dir: checkpoints/llm_llama8b_topk
+  hf_upload:
+    enabled: true
+    repo_id: farischaudhry/llm-llama8b-topk-checkpoints
+    private: true
+    path_prefix: checkpoints/llama8b_topk_baseline
+    upload_final_only: true
