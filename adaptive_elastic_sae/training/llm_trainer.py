@@ -173,6 +173,11 @@ class LLMSAETrainer:
 
             # Forward
             x_hat, h = self.model.forward(x)
+            
+            # Check for NaN in forward pass outputs
+            if torch.isnan(x_hat).any() or torch.isnan(h).any():
+                logger.warning(f"Step {step + 1}: NaN detected in forward pass outputs")
+                continue
 
             # Track max activations for dead-neuron window metrics without
             # retaining autograd history across training steps.
@@ -199,10 +204,19 @@ class LLMSAETrainer:
             else:
                 loss = loss_out
                 loss_components = {"loss_total": loss.item()}
+            
+            # Check for NaN in loss
+            if torch.isnan(loss):
+                logger.warning(f"Step {step + 1}: NaN detected in loss computation")
+                continue
 
             # Backward
             self.optimizer.zero_grad()
             loss.backward()
+            
+            # Gradient clipping to prevent explosion
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            
             self.optimizer.step()
 
             # Normalize decoder

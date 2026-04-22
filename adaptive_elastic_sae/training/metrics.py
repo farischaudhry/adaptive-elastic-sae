@@ -49,23 +49,43 @@ def interaction_leakage_frobenius_approx(
 def active_gram_spectrum(
     decoder: torch.Tensor,
     active_mask: torch.Tensor,
-    eps: float = 1e-12,
+    eps: float = 1e-10,
 ) -> dict[str, float]:
-    """Return min/max eigenvalues and condition number of active Gram block."""
+    """Return min/max eigenvalues and condition number of active Gram block.
+
+    The eigendecomposition is skipped when the active set is degenerate or larger
+    than the model dimension to avoid expensive/unstable geometry evaluations.
+    """
     if active_mask.dtype != torch.bool:
         active_mask = active_mask.bool()
 
-    active_count = active_mask.sum().item()
-    if active_count == 0:
-        return {
-            "active_min_eigenvalue": 0.0,
-            "active_max_eigenvalue": 0.0,
-            "active_condition_number": 0.0,
-        }
+    active_count = int(active_mask.sum().item())
+    n_dim = int(decoder.shape[0])
+    if active_count <= 1 or active_count > n_dim:
+        return {}
 
     d_a = decoder[:, active_mask]
     gram = d_a.T @ d_a
-    eigvals = torch.linalg.eigvalsh(gram)
+
+    # Guard eigendecomposition against invalid inputs.
+    if not torch.isfinite(gram).all():
+        return {
+            "active_min_eigenvalue": float("nan"),
+            "active_max_eigenvalue": float("nan"),
+            "active_condition_number": float("nan"),
+        }
+
+    try:
+        eigvals = torch.linalg.eigvalsh(gram)
+        if not torch.isfinite(eigvals).all():
+            raise RuntimeError("Non-finite eigenvalues in active_gram_spectrum")
+    except RuntimeError:
+        return {
+            "active_min_eigenvalue": float("nan"),
+            "active_max_eigenvalue": float("nan"),
+            "active_condition_number": float("nan"),
+        }
+
     min_eig = torch.clamp(eigvals.min(), min=eps)
     max_eig = eigvals.max()
 
