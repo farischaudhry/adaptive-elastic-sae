@@ -70,6 +70,6 @@ checkpoint:
   hf_upload:
     enabled: true
     repo_id: farischaudhry/llm-llama8b-topk-checkpoints
-    private: true
+    private: false
     path_prefix: checkpoints/llama8b_topk_baseline
     upload_final_only: true

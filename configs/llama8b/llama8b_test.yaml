@@ -71,6 +71,6 @@ checkpoint:
   hf_upload:
     enabled: true
     repo_id: farischaudhry/llm-llama8b-test-checkpoints
-    private: true
+    private: false
     path_prefix: checkpoints/llama8b_test
     upload_final_only: true
