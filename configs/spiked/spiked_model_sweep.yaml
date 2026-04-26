@@ -23,12 +23,12 @@ training:
 models:
   vanilla_l1:
     class_name: VanillaSAE
-    lambda_1: [0.05, 0.01, 0.005, 0.001, 0.0005]
+    lambda_1: [0.01, 0.005, 0.001, 0.0005]
 
   elastic_net:
     class_name: ElasticNetSAE
     lambda_1: [0.01, 0.005, 0.001]
-    lambda_2: [0.005, 0.001, 0.0005, 0.0001]
+    lambda_2: [0.001, 0.0005, 0.0001]
 
   adaptive_lasso:
     class_name: AdaptiveLassoSAE
@@ -42,7 +42,7 @@ models:
   adaptive_elastic_net:
     class_name: AdaptiveElasticNetSAE
     lambda_1: [0.01, 0.005, 0.001]
-    lambda_2: [0.005, 0.001, 0.0005, 0.0001]
+    lambda_2: [0.001, 0.0005, 0.0001]
     gamma: [0.5, 1.0]
     ema_beta: [0.999, 0.9999]
     weight_min: 0.01
