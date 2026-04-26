@@ -1,6 +1,6 @@
 experiment:
   name: llm_pythia_regularization
-  seeds: [0]
+  seeds: [0, 1, 2]
 
 data:
   # Pythia-70M hidden dimension is 512.
