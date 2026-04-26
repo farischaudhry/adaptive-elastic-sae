@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import logging
 import sys
 from pathlib import Path
@@ -37,8 +38,41 @@ def load_config(config_path: str | Path) -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def expand_sweep_dict(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand list-valued config entries via Cartesian product."""
+    sweep_keys = [k for k, v in config.items() if isinstance(v, list)]
+    if not sweep_keys:
+        return [dict(config)]
+
+    fixed = {k: v for k, v in config.items() if k not in sweep_keys}
+    values_product = itertools.product(*(config[k] for k in sweep_keys))
+
+    expanded: list[dict[str, Any]] = []
+    for values in values_product:
+        variant = dict(fixed)
+        for key, value in zip(sweep_keys, values):
+            variant[key] = value
+        expanded.append(variant)
+    return expanded
+
+
+def build_model_variants(models_cfg: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """Expand model configs into concrete sweep variants."""
+    variants: list[tuple[str, dict[str, Any]]] = []
+
+    for model_name, model_cfg in models_cfg.items():
+        expanded = expand_sweep_dict(model_cfg)
+        if len(expanded) == 1:
+            variants.append((model_name, expanded[0]))
+            continue
+
+        for idx, cfg in enumerate(expanded):
+            variants.append((f"{model_name}_sweep{idx:03d}", cfg))
+
+    return variants
+
+
 def instantiate_model(
-    model_name: str,
     model_config: dict[str, Any],
     n_dim: int,
     d_dict: int,
@@ -137,6 +171,7 @@ def main() -> None:
     train_cfg = config["training"]
     models_cfg = config["models"]
     wandb_cfg = config.get("wandb", {})
+    model_variants = build_model_variants(models_cfg)
 
     device = train_cfg.get("device", "cpu")
     dtype_str = train_cfg.get("dtype", "float32")
@@ -145,6 +180,7 @@ def main() -> None:
     logger.info(f"\n{'=' * 80}")
     logger.info("SAE Spiked-Model Mechanistic Validation")
     logger.info(f"{'=' * 80}\n")
+    logger.info(f"Expanded model variants: {len(model_variants)}")
 
     # Get seeds from experiment config
     experiment_cfg = config.get("experiment", {})
@@ -185,14 +221,13 @@ def main() -> None:
             dict_stats_metadata = {f"dict_{k}": v for k, v in dict_stats.items()}
 
             # Train each model variant
-            for model_name, model_config in models_cfg.items():
+            for variant_name, model_config in model_variants:
                 logger.info(f"{'─' * 80}")
-                logger.info(f"Training {model_name.upper()} on rho={rho:.2f}")
+                logger.info(f"Training {variant_name.upper()} on rho={rho:.2f}")
                 logger.info(f"{'─' * 80}\n")
 
                 # Instantiate model
                 model = instantiate_model(
-                    model_name,
                     model_config,
                     data_cfg["n_dim"],
                     data_cfg["d_dict"],
@@ -211,15 +246,15 @@ def main() -> None:
                     ),
                     log_interval=train_cfg.get("log_interval", 100),
                     seed=seed,
-                    model_type=model_name,
+                    model_type=variant_name,
                     device=device,
                     dtype=torch.float32 if dtype_str == "float32" else torch.float64,
                 )
 
-                run_name = f"spiked-rho{rho:.2f}-{model_name}-seed{seed}"
+                run_name = f"spiked-rho{rho:.2f}-{variant_name}-seed{seed}"
                 run_tag_templates = wandb_cfg.get("run_tag_templates", [])
                 run_tags = [
-                    tpl.format(rho=rho, seed=seed, model_name=model_name)
+                    tpl.format(rho=rho, seed=seed, model_name=variant_name)
                     for tpl in run_tag_templates
                 ]
 
@@ -232,13 +267,14 @@ def main() -> None:
                     run_metadata={
                         "seed": seed,
                         "rho": rho,
-                        "model_type": model_name,
+                        "model_type": variant_name,
+                        "model_class": model_config["class_name"],
                         **dict_stats_metadata,
                     },
                     run_tags=run_tags,
                 )
 
-                logger.info(f"\nCompleted {model_name} on rho={rho:.2f}\n")
+                logger.info(f"\nCompleted {variant_name} on rho={rho:.2f}\n")
 
 
 if __name__ == "__main__":

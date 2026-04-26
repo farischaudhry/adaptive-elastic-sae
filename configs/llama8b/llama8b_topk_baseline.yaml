@@ -54,7 +54,7 @@ training:
 models:
   topk_baseline:
     class_name: TopKSAE
-    k: [32, 64, 128, 256, 512, 1024]
+    k: [32, 64, 128, 256, 512]
 
 wandb:
   enabled: true
