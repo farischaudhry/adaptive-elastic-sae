@@ -174,10 +174,11 @@ class SAETrainer:
             self.model.normalize_decoder()
 
             # Track max activations for dead neuron calc
-            self.max_activations = torch.max(
-                self.max_activations,
-                h.abs().max(dim=0).values,
-            )
+            with torch.no_grad():
+                self.max_activations = torch.max(
+                    self.max_activations,
+                    h.detach().abs().max(dim=0).values,
+                )
 
             # Periodic logging
             if (step + 1) % self.config.log_interval == 0:
