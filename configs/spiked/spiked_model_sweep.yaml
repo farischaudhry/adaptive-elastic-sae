@@ -2,7 +2,6 @@ experiment:
   name: spiked_model
   seeds: [0]
 
-
 data:
   n_dim: 256
   d_dict: 1024
