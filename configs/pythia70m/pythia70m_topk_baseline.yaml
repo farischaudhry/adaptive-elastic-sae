@@ -66,4 +66,4 @@ wandb:
 
 checkpoint:
   enabled: true
-  dir: checkpoints/llm_pythia_topk
+  dir: checkpoints/llm_pythia70m_topk
